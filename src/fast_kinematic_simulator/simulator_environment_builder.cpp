@@ -57,7 +57,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, 0.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 0u); // Everything is filled by default
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -67,10 +67,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     // Check if the cell belongs to any of the regions of freespace
                     if (x > 0.5 && y > 0.5 && x <= 9.5 && y <= 9.5 && z > 0.5 && z < 4.5)
                     {
@@ -101,13 +101,13 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
     }
     else if (environment_id == "se2_path_metric_test")
     {
-        double grid_x_size = 10.0;
+        double grid_x_size = 14.0;
         double grid_y_size = 10.0;
         double grid_z_size = 1.0;
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, -0.5);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 0u); // Everything is filled by default
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -117,24 +117,24 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    //const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    //const double& z = location(2);
                     // Check if the cell belongs to any of the regions of freespace
-                    if (x > 0.5 && y > 0.5 && x <= 4.5 && y <= 9.5)
+                    if (x > 0.5 && y > 0.5 && x <= 6.5 && y <= 9.5)
                     {
                         grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(1u);
                         grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
                         grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
                     }
-                    if (x > 5.5 && y > 0.5 && x <= 9.5 && y <= 9.5)
+                    if (x > 7.5 && y > 0.5 && x <= 13.5 && y <= 9.5)
                     {
                         grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(2u);
                         grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
                         grid.GetMutable(x_idx, y_idx, z_idx).first.object_id = 0u;
                     }
-                    if (x > 0.5 && y > 4.0 && x <= 9.5 && y <= 6.0)
+                    if (x > 0.5 && y > 4.5 && x <= 13.5 && y <= 5.5)
                     {
                         grid.GetMutable(x_idx, y_idx, z_idx).first.AddToConvexSegment(3u);
                         grid.GetMutable(x_idx, y_idx, z_idx).first.occupancy = 0.0f;
@@ -153,7 +153,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, 0.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -163,10 +163,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     // Set the object we belong to
                     // We assume that all objects are convex, so we can set the convex region as 1
                     // "Bottom bottom"
@@ -280,7 +280,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-2.0, -2.0, -2.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -290,10 +290,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     // Set the object we belong to
                     // We assume that all objects are convex, so we can set the convex region as 1
                     // "Bottom bottom"
@@ -359,7 +359,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -369,10 +369,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    //const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    //const double& z = location(2);
                     // Make some of the exterior walls opaque
                     if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
                     {
@@ -500,7 +500,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -510,10 +510,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     // Make some of the exterior walls opaque
                     if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
                     {
@@ -585,7 +585,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.0, -1.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -595,10 +595,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     // Set the object we belong to
                     // Make some of the exterior walls opaque
                     if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8) || z_idx >= (grid.GetNumZCells() - 8))
@@ -731,7 +731,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(0.0f, 0u, 0u, 1u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -746,7 +746,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 1u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -757,10 +757,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     const double hole_center_x = 1.03;
                     const double hole_center_y = -0.40;
                     const double hole_center_z = 0.13;
@@ -837,7 +837,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -848,10 +848,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     const double hole_center_x = 1.03;
                     const double hole_center_y = -0.40;
                     const double hole_center_z = 0.13;
@@ -1003,7 +1003,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1014,10 +1014,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     const double hole_center_x = 1.03;
                     const double hole_center_y = -0.40;
                     const double hole_center_z = 0.13;
@@ -1206,7 +1206,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1217,10 +1217,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     const double hole_center_x = 1.03;
                     const double hole_center_y = -0.40;
                     const double hole_center_z = 0.13;
@@ -1427,7 +1427,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 0u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1455,10 +1455,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                         Real hole X: 1.45312 Y: -0.390625 Z: 0.140625
                         Real hole X: 1.48438 Y: -0.390625 Z: 0.140625
                      */
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     const double key_tip_x = 1.225;
                     const double key_base_x = 1.0;
                     const double key_center_y = -0.390625; //-0.40;
@@ -1595,7 +1595,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(-1.5, -2.0, -1.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0f, 1u, 0u, 0u);
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1606,10 +1606,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     const double hole_center_x = 1.03;
                     const double hole_center_y = -0.40;
                     const double hole_center_z = 0.13;
@@ -1695,7 +1695,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, 0.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1705,10 +1705,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     // Set the object we belong to
                     // We assume that all objects are convex, so we can set the convex region as 1
                     // "Bottom bottom"
@@ -1765,7 +1765,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, 0.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1775,10 +1775,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    const double& z = location(2);
                     // Set the object we belong to
                     // We assume that all objects are convex, so we can set the convex region as 1
                     // "Bottom bottom"
@@ -1827,7 +1827,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, -0.5);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 1u); // Everything is filled by default
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1837,10 +1837,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    //const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    //const double& z = location(2);
                     // Check if the cell belongs to any of the regions of freespace
                     if (x > 0.5 && y > 0.5 && x <= 3.0 && y <= 9.5)
                     {
@@ -1885,7 +1885,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, -0.5);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell(1.0, 1u, 0u, 1u); // Everything is filled by default
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -1895,10 +1895,10 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
             {
                 for (int64_t z_idx = 0; z_idx < grid.GetNumZCells(); z_idx++)
                 {
-                    const Eigen::Vector3d location = EigenHelpers::StdVectorDoubleToEigenVector3d(grid.GridIndexToLocation(x_idx, y_idx, z_idx));
-                    const double& x = location.x();
-                    const double& y = location.y();
-                    //const double& z = location.z();
+                    const Eigen::Vector4d location = grid.GridIndexToLocation(x_idx, y_idx, z_idx);
+                    const double& x = location(0);
+                    const double& y = location(1);
+                    //const double& z = location(2);
                     // Check if the cell belongs to any of the regions of freespace
                     if (x > 0.5 && y > 0.5 && x <= 3.0 && y <= 9.5)
                     {
@@ -1967,7 +1967,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(0.0, 0.0, 0.0);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -2053,7 +2053,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         // The grid origin is the minimum point, with identity rotation
         Eigen::Translation3d grid_origin_translation(x_min, y_min, z_min);
         Eigen::Quaterniond grid_origin_rotation = Eigen::Quaterniond::Identity();
-        Eigen::Affine3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
+        Eigen::Isometry3d grid_origin_transform = grid_origin_translation * grid_origin_rotation;
         // Make the grid
         sdf_tools::TAGGED_OBJECT_COLLISION_CELL default_cell;
         sdf_tools::TaggedObjectCollisionMapGrid grid(grid_origin_transform, "uncertainty_planning_simulator", resolution, grid_x_size, grid_y_size, grid_z_size, default_cell);
@@ -2069,7 +2069,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
     }
 }
 
-void simulator_environment_builder::UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Affine3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid)
+void simulator_environment_builder::UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Isometry3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid)
 {
     const Eigen::Vector3d world_location = transform * cell_location;
     // Let's check the penetration distance. We only want to update cells that are *actually* on the surface
