@@ -15,6 +15,7 @@
 #include <sdf_tools/tagged_object_collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
 #include <uncertainty_planning_core/simple_simulator_interface.hpp>
+#include <fast_kinematic_simulator/simple_particle_contact_simulator.hpp>
 
 #ifndef SIMULATOR_ENVIRONMENT_BUILDER_HPP
 #define SIMULATOR_ENVIRONMENT_BUILDER_HPP
@@ -65,13 +66,13 @@ namespace simulator_environment_builder
     /* Build a new environment from the provided obstacles */
     sdf_tools::TaggedObjectCollisionMapGrid BuildEnvironment(const std::vector<OBSTACLE_CONFIG>& obstacles, const double resolution);
 
-    void UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Isometry3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid);
+    void UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Isometry3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, simple_particle_contact_simulator::SurfaceNormalGrid& surface_normals_grid);
 
-    void AdjustSurfaceNormalGridForAllFlatSurfaces(const sdf_tools::SignedDistanceField& environment_sdf, simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid);
+    void AdjustSurfaceNormalGridForAllFlatSurfaces(const sdf_tools::SignedDistanceField& environment_sdf, simple_particle_contact_simulator::SurfaceNormalGrid& surface_normals_grid);
 
-    simple_simulator_interface::SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::string& environment_id, const sdf_tools::SignedDistanceField& environment_sdf);
+    simple_particle_contact_simulator::SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::string& environment_id, const sdf_tools::SignedDistanceField& environment_sdf);
 
-    simple_simulator_interface::SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::vector<OBSTACLE_CONFIG>& obstacles, const sdf_tools::SignedDistanceField& environment_sdf);
+    simple_particle_contact_simulator::SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::vector<OBSTACLE_CONFIG>& obstacles, const sdf_tools::SignedDistanceField& environment_sdf);
 
     class EnvironmentComponents
     {
@@ -79,11 +80,11 @@ namespace simulator_environment_builder
 
         sdf_tools::TaggedObjectCollisionMapGrid environment_;
         sdf_tools::SignedDistanceField environment_sdf_;
-        simple_simulator_interface::SurfaceNormalGrid surface_normals_grid_;
+        simple_particle_contact_simulator::SurfaceNormalGrid surface_normals_grid_;
 
     public:
 
-        EnvironmentComponents(const sdf_tools::TaggedObjectCollisionMapGrid& environment, const sdf_tools::SignedDistanceField& environment_sdf, const simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid) : environment_(environment), environment_sdf_(environment_sdf), surface_normals_grid_(surface_normals_grid) {}
+        EnvironmentComponents(const sdf_tools::TaggedObjectCollisionMapGrid& environment, const sdf_tools::SignedDistanceField& environment_sdf, const simple_particle_contact_simulator::SurfaceNormalGrid& surface_normals_grid) : environment_(environment), environment_sdf_(environment_sdf), surface_normals_grid_(surface_normals_grid) {}
 
         inline const sdf_tools::TaggedObjectCollisionMapGrid& GetEnvironment() const
         {
@@ -95,7 +96,7 @@ namespace simulator_environment_builder
             return environment_sdf_;
         }
 
-        inline const simple_simulator_interface::SurfaceNormalGrid& GetSurfaceNormalsGrid() const
+        inline const simple_particle_contact_simulator::SurfaceNormalGrid& GetSurfaceNormalsGrid() const
         {
             return surface_normals_grid_;
         }

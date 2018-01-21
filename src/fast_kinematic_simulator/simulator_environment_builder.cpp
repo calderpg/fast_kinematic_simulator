@@ -2069,7 +2069,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
     }
 }
 
-void simulator_environment_builder::UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Isometry3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid)
+void simulator_environment_builder::UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Isometry3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, simple_particle_contact_simulator::SurfaceNormalGrid& surface_normals_grid)
 {
     const Eigen::Vector3d world_location = transform * cell_location;
     // Let's check the penetration distance. We only want to update cells that are *actually* on the surface
@@ -2096,7 +2096,7 @@ void simulator_environment_builder::UpdateSurfaceNormalGridCell(const std::vecto
     }
 }
 
-void simulator_environment_builder::AdjustSurfaceNormalGridForAllFlatSurfaces(const sdf_tools::SignedDistanceField& environment_sdf, simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid)
+void simulator_environment_builder::AdjustSurfaceNormalGridForAllFlatSurfaces(const sdf_tools::SignedDistanceField& environment_sdf, simple_particle_contact_simulator::SurfaceNormalGrid& surface_normals_grid)
 {
     for (int64_t x_idx = 0; x_idx < environment_sdf.GetNumXCells(); x_idx++)
     {
@@ -2165,10 +2165,10 @@ void simulator_environment_builder::AdjustSurfaceNormalGridForAllFlatSurfaces(co
     }
 }
 
-simple_simulator_interface::SurfaceNormalGrid simulator_environment_builder::BuildSurfaceNormalsGrid(const std::string& environment_id, const sdf_tools::SignedDistanceField& environment_sdf)
+simple_particle_contact_simulator::SurfaceNormalGrid simulator_environment_builder::BuildSurfaceNormalsGrid(const std::string& environment_id, const sdf_tools::SignedDistanceField& environment_sdf)
 {
     // Make the grid
-    simple_simulator_interface::SurfaceNormalGrid surface_normals_grid(environment_sdf.GetOriginTransform(), environment_sdf.GetResolution(), environment_sdf.GetXSize(), environment_sdf.GetYSize(), environment_sdf.GetZSize());
+    simple_particle_contact_simulator::SurfaceNormalGrid surface_normals_grid(environment_sdf.GetOriginTransform(), environment_sdf.GetResolution(), environment_sdf.GetXSize(), environment_sdf.GetYSize(), environment_sdf.GetZSize());
     // The naive start is to fill the surface normals grid with the gradient values from the SDF
     for (int64_t x_idx = 0; x_idx < environment_sdf.GetNumXCells(); x_idx++)
     {
@@ -2273,10 +2273,10 @@ simple_simulator_interface::SurfaceNormalGrid simulator_environment_builder::Bui
     return surface_normals_grid;
 }
 
-simple_simulator_interface::SurfaceNormalGrid simulator_environment_builder::BuildSurfaceNormalsGrid(const std::vector<OBSTACLE_CONFIG>& obstacles, const sdf_tools::SignedDistanceField& environment_sdf)
+simple_particle_contact_simulator::SurfaceNormalGrid simulator_environment_builder::BuildSurfaceNormalsGrid(const std::vector<OBSTACLE_CONFIG>& obstacles, const sdf_tools::SignedDistanceField& environment_sdf)
 {
     // Make the grid
-    simple_simulator_interface::SurfaceNormalGrid surface_normals_grid(environment_sdf.GetOriginTransform(), environment_sdf.GetResolution(), environment_sdf.GetXSize(), environment_sdf.GetYSize(), environment_sdf.GetZSize());
+    simple_particle_contact_simulator::SurfaceNormalGrid surface_normals_grid(environment_sdf.GetOriginTransform(), environment_sdf.GetResolution(), environment_sdf.GetXSize(), environment_sdf.GetYSize(), environment_sdf.GetZSize());
     // The naive start is to fill the surface normals grid with the gradient values from the SDF
     for (int64_t x_idx = 0; x_idx < environment_sdf.GetNumXCells(); x_idx++)
     {
@@ -2489,7 +2489,7 @@ simulator_environment_builder::EnvironmentComponents simulator_environment_build
 {
     const sdf_tools::TaggedObjectCollisionMapGrid environment = BuildEnvironment(obstacles, resolution);
     const sdf_tools::SignedDistanceField environment_sdf = environment.ExtractSignedDistanceField(std::numeric_limits<float>::infinity(), std::vector<uint32_t>()).first;
-    const simple_simulator_interface::SurfaceNormalGrid surface_normal_grid = BuildSurfaceNormalsGrid(obstacles, environment_sdf);
+    const simple_particle_contact_simulator::SurfaceNormalGrid surface_normal_grid = BuildSurfaceNormalsGrid(obstacles, environment_sdf);
     return simulator_environment_builder::EnvironmentComponents(environment, environment_sdf, surface_normal_grid);
 }
 
@@ -2497,7 +2497,7 @@ simulator_environment_builder::EnvironmentComponents simulator_environment_build
 {
     const sdf_tools::TaggedObjectCollisionMapGrid environment = BuildEnvironment(environment_id, resolution);
     const sdf_tools::SignedDistanceField environment_sdf = environment.ExtractSignedDistanceField(std::numeric_limits<float>::infinity(), std::vector<uint32_t>()).first;
-    const simple_simulator_interface::SurfaceNormalGrid surface_normal_grid = BuildSurfaceNormalsGrid(environment_id, environment_sdf);
+    const simple_particle_contact_simulator::SurfaceNormalGrid surface_normal_grid = BuildSurfaceNormalsGrid(environment_id, environment_sdf);
     return simulator_environment_builder::EnvironmentComponents(environment, environment_sdf, surface_normal_grid);
 }
 

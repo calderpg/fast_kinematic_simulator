@@ -15,7 +15,9 @@
 #include <arc_utilities/voxel_grid.hpp>
 #include <sdf_tools/tagged_object_collision_map.hpp>
 #include <sdf_tools/sdf.hpp>
+#include <arc_utilities/simple_robot_models.hpp>
 #include <uncertainty_planning_core/simple_simulator_interface.hpp>
+#include <fast_kinematic_simulator/tnuva_robot_models.hpp>
 #include <ros/ros.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <omp.h>
@@ -23,8 +25,323 @@
 #ifndef SIMPLE_PARTICLE_CONTACT_SIMULATOR_HPP
 #define SIMPLE_PARTICLE_CONTACT_SIMULATOR_HPP
 
+namespace std
+{
+    template <>
+    struct hash<std::pair<size_t, size_t>>
+    {
+        std::size_t operator()(const std::pair<size_t, size_t>& pair) const
+        {
+            using std::size_t;
+            using std::hash;
+            return (std::hash<size_t>()(pair.first) ^ (std::hash<size_t>()(pair.second) << 1));
+        }
+    };
+}
+
 namespace simple_particle_contact_simulator
 {
+    class SurfaceNormalGrid
+    {
+    protected:
+
+        struct StoredSurfaceNormal
+        {
+        protected:
+
+            Eigen::Vector4d entry_direction_;
+            Eigen::Vector3d normal_;
+
+        public:
+
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+            StoredSurfaceNormal(const Eigen::Vector3d& normal, const Eigen::Vector3d& direction) : normal_(EigenHelpers::SafeNormal(normal))
+            {
+                const Eigen::Vector4d direction4d(direction.x(), direction.y(), direction.z(), 0.0);
+                entry_direction_ = (EigenHelpers::SafeNormal(direction4d));
+            }
+
+            StoredSurfaceNormal(const Eigen::Vector3d& normal, const Eigen::Vector4d& direction) : entry_direction_(EigenHelpers::SafeNormal(direction)), normal_(EigenHelpers::SafeNormal(normal)) {}
+
+            StoredSurfaceNormal() : entry_direction_(Eigen::Vector4d(0.0, 0.0, 0.0, 0.0)), normal_(Eigen::Vector3d(0.0, 0.0, 0.0)) {}
+
+            const Eigen::Vector4d& EntryDirection4d() const
+            {
+                return entry_direction_;
+            }
+
+            Eigen::Vector3d EntryDirection3d() const
+            {
+                return entry_direction_.block<3, 1>(0, 0);
+            }
+
+            const Eigen::Vector3d& Normal() const
+            {
+                return normal_;
+            }
+        };
+
+        VoxelGrid::VoxelGrid<std::vector<StoredSurfaceNormal>> surface_normal_grid_;
+        bool initialized_;
+
+        static Eigen::Vector3d GetBestSurfaceNormal(const std::vector<StoredSurfaceNormal>& stored_surface_normals, const Eigen::Vector3d& direction)
+        {
+            assert(stored_surface_normals.size() > 0);
+            const double direction_norm = direction.norm();
+            assert(direction_norm > 0.0);
+            const Eigen::Vector3d unit_direction = direction / direction_norm;
+            int32_t best_stored_index = -1;
+            double best_dot_product = -std::numeric_limits<double>::infinity();
+            for (size_t idx = 0; idx < stored_surface_normals.size(); idx++)
+            {
+                const StoredSurfaceNormal& stored_surface_normal = stored_surface_normals[idx];
+                const double dot_product = stored_surface_normal.EntryDirection3d().dot(unit_direction);
+                if (dot_product > best_dot_product)
+                {
+                    best_dot_product = dot_product;
+                    best_stored_index = (int32_t)idx;
+                }
+            }
+            assert(best_stored_index >= 0);
+            const Eigen::Vector3d& best_surface_normal = stored_surface_normals[(size_t)best_stored_index].Normal();
+            return best_surface_normal;
+        }
+
+        static Eigen::Vector3d GetBestSurfaceNormal(const std::vector<StoredSurfaceNormal>& stored_surface_normals, const Eigen::Vector4d& direction)
+        {
+            assert(stored_surface_normals.size() > 0);
+            const double direction_norm = direction.norm();
+            assert(direction_norm > 0.0);
+            const Eigen::Vector4d unit_direction = direction / direction_norm;
+            int32_t best_stored_index = -1;
+            double best_dot_product = -std::numeric_limits<double>::infinity();
+            for (size_t idx = 0; idx < stored_surface_normals.size(); idx++)
+            {
+                const StoredSurfaceNormal& stored_surface_normal = stored_surface_normals[idx];
+                const double dot_product = stored_surface_normal.EntryDirection4d().dot(unit_direction);
+                if (dot_product > best_dot_product)
+                {
+                    best_dot_product = dot_product;
+                    best_stored_index = (int32_t)idx;
+                }
+            }
+            assert(best_stored_index >= 0);
+            const Eigen::Vector3d& best_surface_normal = stored_surface_normals[(size_t)best_stored_index].Normal();
+            return best_surface_normal;
+        }
+
+    public:
+
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+        SurfaceNormalGrid(const Eigen::Isometry3d& origin_transform, const double resolution, const double x_size, const double y_size, const double z_size)
+        {
+            surface_normal_grid_ = VoxelGrid::VoxelGrid<std::vector<StoredSurfaceNormal>>(origin_transform, resolution, x_size, y_size, z_size, std::vector<StoredSurfaceNormal>());
+            initialized_ = true;
+        }
+
+        SurfaceNormalGrid() : initialized_(false) {}
+
+        bool IsInitialized() const
+        {
+            return initialized_;
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const double x, const double y, const double z, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const Eigen::Vector4d location(x, y, z, 1.0);
+            return LookupSurfaceNormal(location, direction);
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex3d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
+            {
+                return LookupSurfaceNormal(index, direction);
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector4d& location, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex4d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
+            {
+                return LookupSurfaceNormal(index, direction);
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const Eigen::Vector4d& location, const Eigen::Vector4d& direction) const
+        {
+            assert(initialized_);
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex4d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
+            {
+                return LookupSurfaceNormal(index, direction);
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const VoxelGrid::GRID_INDEX& index, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            return LookupSurfaceNormal(index.x, index.y, index.z, direction);
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const VoxelGrid::GRID_INDEX& index, const Eigen::Vector4d& direction) const
+        {
+            assert(initialized_);
+            return LookupSurfaceNormal(index.x, index.y, index.z, direction);
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector3d& direction) const
+        {
+            assert(initialized_);
+            const std::pair<const std::vector<StoredSurfaceNormal>&, bool> lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
+            if (lookup.second)
+            {
+                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.first;
+                if (stored_surface_normals.size() == 0)
+                {
+                    return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), true);
+                }
+                else
+                {
+                    // We get the "best" match surface normal given our entry direction
+                    return std::pair<Eigen::Vector3d, bool>(GetBestSurfaceNormal(stored_surface_normals, direction), true);
+                }
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector4d& direction) const
+        {
+            assert(initialized_);
+            const std::pair<const std::vector<StoredSurfaceNormal>&, bool> lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
+            if (lookup.second)
+            {
+                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.first;
+                if (stored_surface_normals.size() == 0)
+                {
+                    return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), true);
+                }
+                else
+                {
+                    // We get the "best" match surface normal given our entry direction
+                    return std::pair<Eigen::Vector3d, bool>(GetBestSurfaceNormal(stored_surface_normals, direction), true);
+                }
+            }
+            else
+            {
+                return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), false);
+            }
+        }
+
+        inline bool InsertSurfaceNormal(const double x, const double y, const double z, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            const Eigen::Vector3d location(x, y, z);
+            return InsertSurfaceNormal(location, surface_normal, entry_direction);
+        }
+
+        inline bool InsertSurfaceNormal(const Eigen::Vector3d& location, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex3d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
+            {
+                return InsertSurfaceNormal(index, surface_normal, entry_direction);
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline bool InsertSurfaceNormal(const VoxelGrid::GRID_INDEX& index, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            return InsertSurfaceNormal(index.x, index.y, index.z, surface_normal, entry_direction);
+        }
+
+        inline bool InsertSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
+        {
+            assert(initialized_);
+            std::pair<std::vector<StoredSurfaceNormal>&, bool> cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
+            if (cell_query.second)
+            {
+                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.first;
+                cell_normals.push_back(StoredSurfaceNormal(surface_normal, entry_direction));
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline bool ClearStoredSurfaceNormals(const double x, const double y, const double z)
+        {
+            assert(initialized_);
+            const Eigen::Vector3d location(x, y, z);
+            return ClearStoredSurfaceNormals(location);
+        }
+
+        inline bool ClearStoredSurfaceNormals(const Eigen::Vector3d& location)
+        {
+            assert(initialized_);
+            const VoxelGrid::GRID_INDEX index = surface_normal_grid_.LocationToGridIndex3d(location);
+            if (surface_normal_grid_.IndexInBounds(index))
+            {
+                return ClearStoredSurfaceNormals(index);
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        inline bool ClearStoredSurfaceNormals(const VoxelGrid::GRID_INDEX& index)
+        {
+            assert(initialized_);
+            return ClearStoredSurfaceNormals(index.x, index.y, index.z);
+        }
+
+        inline bool ClearStoredSurfaceNormals(const int64_t x_index, const int64_t y_index, const int64_t z_index)
+        {
+            assert(initialized_);
+            std::pair<std::vector<StoredSurfaceNormal>&, bool> cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
+            if (cell_query.second)
+            {
+                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.first;
+                cell_normals.clear();
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    };
+
     struct SimulatorSolverParameters
     {
         double environment_collision_check_tolerance;
@@ -47,17 +364,25 @@ namespace simple_particle_contact_simulator
         }
     };
 
-    template<typename Robot, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
-    class SimpleParticleContactSimulator : public simple_simulator_interface::SimulatorInterface<Robot, Configuration, RNG, ConfigAlloc>
+    template<typename DerivedRobotType, typename Configuration, typename RNG, typename ConfigAlloc=std::allocator<Configuration>>
+    class SimpleParticleContactSimulator : public simple_simulator_interface::SimulatorInterface<Configuration, RNG, ConfigAlloc>
     {
     protected:
 
+        typedef simple_robot_model_interface::SimpleRobotModelInterface<Configuration, ConfigAlloc> BaseRobotType;
+
+        sdf_tools::TaggedObjectCollisionMapGrid environment_;
+        sdf_tools::SignedDistanceField environment_sdf_;
+        SurfaceNormalGrid surface_normals_grid_;
+        std::map<uint32_t, uint32_t> convex_segment_counts_;
         bool initialized_;
+        bool simulate_with_individual_jacobians_;
         double simulation_controller_frequency_;
         double simulation_controller_interval_;
         double contact_distance_threshold_;
         double resolution_distance_threshold_;
         SimulatorSolverParameters solver_config_;
+        mutable std::vector<RNG> rngs_;
         mutable std::atomic<uint64_t> simulation_call_;
         mutable std::atomic<uint64_t> successful_resolves_;
         mutable std::atomic<uint64_t> unsuccessful_resolves_;
@@ -68,20 +393,73 @@ namespace simple_particle_contact_simulator
         mutable std::atomic<uint64_t> unsuccessful_self_collision_resolves_;
         mutable std::atomic<uint64_t> recovered_unsuccessful_resolves_;
 
+        static inline size_t GetNumOMPThreads()
+        {
+            #if defined(_OPENMP)
+            size_t num_threads = 0;
+            #pragma omp parallel
+            {
+                num_threads = (size_t)omp_get_num_threads();
+            }
+            return num_threads;
+            #else
+            return 1;
+            #endif
+        }
+
     public:
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        SimpleParticleContactSimulator(const sdf_tools::TaggedObjectCollisionMapGrid& environment, const sdf_tools::SignedDistanceField& environment_sdf, const simple_simulator_interface::SurfaceNormalGrid& surface_normals_grid, const SimulatorSolverParameters& solver_config, const double simulation_controller_frequency, const int32_t debug_level) : simple_simulator_interface::SimulatorInterface<Robot, Configuration, RNG, ConfigAlloc>(environment, environment_sdf, surface_normals_grid, debug_level)
+        SimpleParticleContactSimulator(const sdf_tools::TaggedObjectCollisionMapGrid& environment, const sdf_tools::SignedDistanceField& environment_sdf, const SurfaceNormalGrid& surface_normals_grid, const SimulatorSolverParameters& solver_config, const double simulation_controller_frequency, const bool simulate_with_individual_jacobians, const uint64_t prng_seed, const int32_t debug_level) : simple_simulator_interface::SimulatorInterface<Configuration, RNG, ConfigAlloc>(debug_level), environment_(environment), environment_sdf_(environment_sdf), surface_normals_grid_(surface_normals_grid)
         {
+            simulate_with_individual_jacobians_ = simulate_with_individual_jacobians;
             contact_distance_threshold_ = 0.0;
             resolution_distance_threshold_ = 0.0;
             simulation_controller_frequency_ = std::abs(simulation_controller_frequency);
             simulation_controller_interval_ = 1.0 / simulation_controller_frequency;
             solver_config_ = solver_config;
             simulation_call_.store(0);
+            // Prepare the default RNG
+            RNG prng(prng_seed);
+            // Temp seed distribution
+            std::uniform_int_distribution<uint64_t> seed_dist(0, std::numeric_limits<uint64_t>::max());
+            // Get the number of threads we're using
+            const size_t num_threads = GetNumOMPThreads();
+            // Prepare a number of PRNGs for each thread
+            rngs_.clear();
+            for (size_t tidx = 0; tidx < num_threads; tidx++)
+            {
+                rngs_.push_back(RNG(seed_dist(prng)));
+            }
             ResetStatistics();
             initialized_ = true;
+        }
+
+        inline void ResetGenerators(const uint64_t prng_seed)
+        {
+            // Prepare the default RNG
+            RNG prng(prng_seed);
+            // Temp seed distribution
+            std::uniform_int_distribution<uint64_t> seed_dist(0, std::numeric_limits<uint64_t>::max());
+            // Get the number of threads we're using
+            const uint32_t num_threads = GetNumOMPThreads();
+            // Prepare a number of PRNGs for each thread
+            rngs_.clear();
+            for (uint32_t tidx = 0; tidx < num_threads; tidx++)
+            {
+                rngs_.push_back(PRNG(seed_dist(prng)));
+            }
+        }
+
+        virtual RNG& GetRandomGenerator()
+        {
+        #if defined(_OPENMP)
+            const size_t th_id = (size_t)omp_get_thread_num();
+        #else
+            const size_t th_id = 0;
+        #endif
+            return rngs_[th_id];
         }
 
         inline bool IsInitialized() const
@@ -115,7 +493,281 @@ namespace simple_particle_contact_simulator
             recovered_unsuccessful_resolves_.store(0);
         }
 
-        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const Robot& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, std::vector<RNG>& rngs, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, ros::Publisher& display_debug_publisher) const
+        inline Eigen::Isometry3d GetOriginTransform() const
+        {
+            return environment_.GetOriginTransform();
+        }
+
+        virtual std::string GetFrame() const
+        {
+            return environment_.GetFrame();
+        }
+
+        inline double GetResolution() const
+        {
+            return environment_.GetResolution();
+        }
+
+        inline const sdf_tools::TaggedObjectCollisionMapGrid& GetEnvironment() const
+        {
+            return environment_;
+        }
+
+        inline sdf_tools::TaggedObjectCollisionMapGrid& GetMutableEnvironment()
+        {
+            return environment_;
+        }
+
+        inline const sdf_tools::SignedDistanceField& GetEnvironmentSDF() const
+        {
+            return environment_sdf_;
+        }
+
+        inline sdf_tools::SignedDistanceField& GetMutableEnvironmentSDF()
+        {
+            return environment_sdf_;
+        }
+
+        inline visualization_msgs::Marker ExportEnvironmentForDisplay(const float alpha=1.0f) const
+        {
+            return environment_.ExportForDisplay(alpha);
+        }
+
+        inline visualization_msgs::Marker ExportSDFForDisplay(const float alpha=1.0f) const
+        {
+            return environment_sdf_.ExportForDisplay(alpha);
+        }
+
+        virtual visualization_msgs::MarkerArray MakeEnvironmentDisplayRep() const
+        {
+            visualization_msgs::MarkerArray display_markers;
+            visualization_msgs::Marker env_marker = environment_.ExportForDisplay();
+            env_marker.id = 1;
+            env_marker.ns = "sim_environment";
+            display_markers.markers.push_back(env_marker);
+            visualization_msgs::Marker components_marker = environment_.ExportConnectedComponentsForDisplay(false);
+            components_marker.id = 1;
+            components_marker.ns = "sim_environment_components";
+            display_markers.markers.push_back(components_marker);
+            visualization_msgs::Marker env_sdf_marker = environment_sdf_.ExportForDisplay(1.0f);
+            env_sdf_marker.id = 1;
+            env_sdf_marker.ns = "sim_environment_sdf";
+            display_markers.markers.push_back(env_sdf_marker);
+            // Draw all the convex segments for each object
+            for (auto convex_segment_counts_itr = convex_segment_counts_.begin(); convex_segment_counts_itr != convex_segment_counts_.end(); ++convex_segment_counts_itr)
+            {
+                const uint32_t object_id = convex_segment_counts_itr->first;
+                const uint32_t convex_segment_count = convex_segment_counts_itr->second;
+                for (uint32_t convex_segment = 1; convex_segment <= convex_segment_count; convex_segment++)
+                {
+                    const visualization_msgs::Marker segment_marker = environment_.ExportConvexSegmentForDisplay(object_id, convex_segment);
+                    display_markers.markers.push_back(segment_marker);
+                }
+            }
+            return display_markers;
+        }
+
+        inline visualization_msgs::MarkerArray MakeConfigurationDisplayRepMixed(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
+        {
+            // Perform FK on the current config
+            std::shared_ptr<BaseRobotType> working_robot(immutable_robot->Clone());
+            working_robot->SetPosition(configuration);
+            // Now, go through the links and points of the robot for collision checking
+            visualization_msgs::MarkerArray configuration_markers;
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
+                // Get the transform of the current link
+                const Eigen::Isometry3d link_transform = working_robot->GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector4d& raw_link_sphere = link_points[point_idx];
+                    const double sphere_radius = (link_geometry_type == simple_robot_models::PointSphereGeometry::SPHERES) ? raw_link_sphere(3) : (this->GetResolution() * 0.5);
+                    const Eigen::Vector4d link_relative_sphere_origin(raw_link_sphere(0), raw_link_sphere(1), raw_link_sphere(2), 1.0);
+                    const Eigen::Vector4d environment_relative_sphere_origin = link_transform * link_relative_sphere_origin;
+                    // Make the marker for the current sphere
+                    std_msgs::ColorRGBA real_color = color;
+                    visualization_msgs::Marker configuration_marker;
+                    configuration_marker.action = visualization_msgs::Marker::ADD;
+                    configuration_marker.ns = config_marker_ns;
+                    configuration_marker.id = starting_index + (uint32_t)configuration_markers.markers.size();
+                    configuration_marker.frame_locked = false;
+                    configuration_marker.lifetime = ros::Duration(0.0);
+                    configuration_marker.type = visualization_msgs::Marker::SPHERE;
+                    configuration_marker.header.frame_id = this->GetFrame();
+                    configuration_marker.scale.x = sphere_radius * 2.0;
+                    configuration_marker.scale.y = sphere_radius * 2.0;
+                    configuration_marker.scale.z = sphere_radius * 2.0;
+                    configuration_marker.pose.position = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_sphere_origin);
+                    configuration_marker.pose.orientation = EigenHelpersConversions::EigenQuaterniondToGeometryQuaternion(Eigen::Quaterniond::Identity());
+                    configuration_marker.color = real_color;
+                    // Store it
+                    configuration_markers.markers.push_back(configuration_marker);
+                }
+            }
+            return configuration_markers;
+        }
+
+        inline visualization_msgs::MarkerArray MakeConfigurationDisplayRepPoints(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
+        {
+            std::shared_ptr<BaseRobotType> working_robot(immutable_robot->Clone());
+            std_msgs::ColorRGBA real_color = color;
+            visualization_msgs::Marker configuration_marker;
+            configuration_marker.action = visualization_msgs::Marker::ADD;
+            configuration_marker.ns = config_marker_ns;
+            configuration_marker.id = starting_index;
+            configuration_marker.frame_locked = false;
+            configuration_marker.lifetime = ros::Duration(0.0);
+            configuration_marker.type = visualization_msgs::Marker::SPHERE_LIST;
+            configuration_marker.header.frame_id = this->GetFrame();
+            configuration_marker.scale.x = this->GetResolution();
+            configuration_marker.scale.y = this->GetResolution();
+            configuration_marker.scale.z = this->GetResolution();
+            const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+            configuration_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
+            configuration_marker.color = real_color;
+            // Make the individual points
+            // Update the position of the robot
+            working_robot->SetPosition(configuration);
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
+                assert(link_geometry_type == simple_robot_models::PointSphereGeometry::POINTS);
+                // Get the transform of the current link
+                const Eigen::Isometry3d link_transform = working_robot->GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector4d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector4d environment_relative_point = link_transform * link_relative_point;
+                    const geometry_msgs::Point marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_point);
+                    configuration_marker.points.push_back(marker_point);
+                    if (link_relative_point.norm() == 0.0)
+                    {
+                        std_msgs::ColorRGBA black_color;
+                        black_color.r = 0.0f;
+                        black_color.g = 0.0f;
+                        black_color.b = 0.0f;
+                        black_color.a = 1.0f;
+                        configuration_marker.colors.push_back(black_color);
+                    }
+                    else
+                    {
+                        configuration_marker.colors.push_back(real_color);
+                    }
+                }
+            }
+            visualization_msgs::MarkerArray configuration_markers;
+            configuration_markers.markers = {configuration_marker};
+            return configuration_markers;
+        }
+
+        virtual visualization_msgs::MarkerArray MakeConfigurationDisplayRep(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& configuration, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& config_marker_ns) const
+        {
+            bool points_only = true;
+            const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries = static_cast<DerivedRobotType*>(immutable_robot.get())->GetLinkGeometries();
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
+            {
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                if (link_geometry_type != simple_robot_models::PointSphereGeometry::POINTS)
+                {
+                    points_only = false;
+                }
+            }
+            if (points_only)
+            {
+                return MakeConfigurationDisplayRepPoints(immutable_robot, robot_link_geometries, configuration, color, starting_index, config_marker_ns);
+            }
+            else
+            {
+                return MakeConfigurationDisplayRepMixed(immutable_robot, robot_link_geometries, configuration, color, starting_index, config_marker_ns);
+            }
+        }
+
+        virtual visualization_msgs::MarkerArray MakeControlInputDisplayRep(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& configuration, const Eigen::VectorXd& control_input, const std_msgs::ColorRGBA& color, const int32_t starting_index, const std::string& control_input_marker_ns) const
+        {
+            std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
+            std_msgs::ColorRGBA real_color = color;
+            visualization_msgs::Marker control_input_marker;
+            control_input_marker.action = visualization_msgs::Marker::ADD;
+            control_input_marker.ns = control_input_marker_ns;
+            control_input_marker.id = starting_index;
+            control_input_marker.frame_locked = false;
+            control_input_marker.lifetime = ros::Duration(0.0);
+            control_input_marker.type = visualization_msgs::Marker::LINE_LIST;
+            control_input_marker.header.frame_id = this->GetFrame();
+            control_input_marker.scale.x = this->GetResolution() * 0.5;
+            control_input_marker.scale.y = this->GetResolution() * 0.5;
+            control_input_marker.scale.z = this->GetResolution() * 0.5;
+            const Eigen::Isometry3d base_transform = Eigen::Isometry3d::Identity();
+            control_input_marker.pose = EigenHelpersConversions::EigenIsometry3dToGeometryPose(base_transform);
+            control_input_marker.color = real_color;
+            // Make the indivudal points
+            // Get the list of link name + link points for all the links of the robot
+            const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries = static_cast<DerivedRobotType*>(immutable_robot.get())->GetLinkGeometries();
+            // Now, go through the links and points of the robot for collision checking
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
+            {
+                // Grab the link name and points
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
+                // Get the current transform
+                // Update the position of the robot
+                robot->SetPosition(configuration);
+                // Get the transform of the current link
+                const Eigen::Isometry3d current_link_transform = robot->GetLinkTransform(link_name);
+                // Apply the control input
+                static_cast<DerivedRobotType*>(robot.get())->ApplyControlInput(control_input);
+                // Get the transform of the current link
+                const Eigen::Isometry3d current_plus_control_link_transform = robot->GetLinkTransform(link_name);
+                // Now, go through the points of the link
+                for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
+                {
+                    // Transform the link point into the environment frame
+                    const Eigen::Vector4d& link_relative_point = link_points[point_idx];
+                    const Eigen::Vector4d environment_relative_current_point = current_link_transform * link_relative_point;
+                    const Eigen::Vector4d environment_relative_current_plus_control_point = current_plus_control_link_transform * link_relative_point;
+                    const geometry_msgs::Point current_marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_current_point);
+                    const geometry_msgs::Point current_plus_control_marker_point = EigenHelpersConversions::EigenVector4dToGeometryPoint(environment_relative_current_plus_control_point);
+                    control_input_marker.points.push_back(current_marker_point);
+                    control_input_marker.points.push_back(current_plus_control_marker_point);
+                    control_input_marker.colors.push_back(real_color);
+                    control_input_marker.colors.push_back(real_color);
+                }
+            }
+            visualization_msgs::MarkerArray control_input_markers;
+            control_input_markers.markers = {control_input_marker};
+            return control_input_markers;
+        }
+
+        virtual Eigen::Vector4d Get3dPointForConfig(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& config) const
+        {
+            std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
+            const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries = static_cast<DerivedRobotType*>(immutable_robot.get())->GetLinkGeometries();
+            robot->SetPosition(config);
+            const std::string& link_name = robot_link_geometries.back().first;
+            const Eigen::Isometry3d link_transform = robot->GetLinkTransform(link_name);
+            const Eigen::Vector4d link_relative_point(0.0, 0.0, 0.0, 1.0);
+            const Eigen::Vector4d config_point = link_transform * link_relative_point;
+            return config_point;
+        }
+
+        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
         {
             if (start_positions.size() > 0)
             {
@@ -128,28 +780,29 @@ namespace simple_particle_contact_simulator
                 const Configuration& initial_particle = start_positions[idx];
                 const Configuration& target_position = (target_positions.size() == start_positions.size()) ? target_positions[idx] : target_positions.front();
                 simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
-#if defined(_OPENMP)
-                const size_t th_id = (size_t)omp_get_thread_num();
-#else
-                const size_t th_id = 0;
-#endif
-                propagated_points[idx] = ForwardSimulateRobot(immutable_robot, initial_particle, target_position, rngs[th_id], forward_simulation_time, simulation_shortcut_distance, use_individual_jacobians, allow_contacts, trace, false, display_debug_publisher);
+                propagated_points[idx] = ForwardSimulateRobot(immutable_robot, initial_particle, target_position, forward_simulation_time, simulation_shortcut_distance, allow_contacts, trace, false, display_fn);
             }
             return propagated_points;
         }
 
-        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const Robot& immutable_robot, const Configuration& start_position, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const
+        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
         {
-            Robot robot = immutable_robot;
-            robot.ResetPosition(start_position);
-            return ForwardSimulateMutableRobot(robot, target_position, rng, forward_simulation_time, simulation_shortcut_distance, use_individual_jacobians, allow_contacts, trace, enable_tracing, display_debug_publisher);
+            std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
+            static_cast<DerivedRobotType*>(robot.get())->ResetPosition(start_position);
+            return ForwardSimulateMutableRobot(robot, target_position, forward_simulation_time, simulation_shortcut_distance, allow_contacts, trace, enable_tracing, display_fn);
         }
 
-        virtual std::pair<Configuration, bool> ForwardSimulateMutableRobot(Robot& robot, const Configuration& target_position, RNG& rng, const double forward_simulation_time, const double simulation_shortcut_distance, const bool use_individual_jacobians, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, ros::Publisher& display_debug_publisher) const
+        virtual std::pair<Configuration, bool> ForwardSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
         {
+        #if defined(_OPENMP)
+            const size_t th_id = (size_t)omp_get_thread_num();
+        #else
+            const size_t th_id = 0;
+        #endif
+            RNG& rng = rngs_[th_id];
             simulation_call_.fetch_add(1u);
             const uint64_t call_number = simulation_call_.load();
-            const Configuration start_position = robot.GetPosition();
+            const Configuration start_position = robot->GetPosition();
             // Forward simulate for the provided number of steps
             bool collided = false;
             const uint32_t forward_simulation_steps = std::max((uint32_t)(forward_simulation_time * simulation_controller_frequency_), 1u);
@@ -164,14 +817,14 @@ namespace simple_particle_contact_simulator
                 // Step forward via the simulator
                 // Have robot compute next control input first
                 // Then, in a second function *not* in a callback, apply that control input
-                const Eigen::VectorXd control_action = robot.GenerateControlAction(target_position, simulation_controller_interval_, rng);
-                const std::pair<Configuration, std::pair<bool, bool>> result = ResolveForwardSimulation(robot, control_action, simulation_controller_interval_, rng, use_individual_jacobians, allow_contacts, trace, enable_tracing, call_number, display_debug_publisher);
+                const Eigen::VectorXd control_action = static_cast<DerivedRobotType*>(robot.get())->GenerateControlAction(target_position, simulation_controller_interval_);
+                const std::pair<Configuration, std::pair<bool, bool>> result = ResolveForwardSimulation(robot, control_action, simulation_controller_interval_, rng, simulate_with_individual_jacobians_, allow_contacts, trace, enable_tracing, call_number, display_fn);
                 const Configuration& resolved_configuration = result.first;
                 const bool resolve_collided = result.second.first;
                 const bool current_resolve_failed = result.second.second;
                 if ((allow_contacts == true) || (resolve_collided == false))
                 {
-                    robot.UpdatePosition(resolved_configuration);
+                    robot->SetPosition(resolved_configuration);
                     // Check if we've collided with the environment
                     if (resolve_collided)
                     {
@@ -194,7 +847,7 @@ namespace simple_particle_contact_simulator
                         }
                     }
                     // Last, but not least, check if we've gotten close enough the target state to short-circut the simulation
-                    const double target_distance = robot.ComputeDistanceTo(target_position);
+                    const double target_distance = robot->ComputeConfigurationDistance(target_position);
                     if (target_distance < simulation_shortcut_distance)
                     {
                         break;
@@ -208,7 +861,7 @@ namespace simple_particle_contact_simulator
                 }
             }
             // Return the ending position of the robot and if it has collided during simulation
-            const Configuration reached_position = robot.GetPosition();
+            const Configuration reached_position = robot->GetPosition();
             if (this->debug_level_ >= 1)
             {
                 const std::string msg = "[" + std::to_string(call_number) + "] Forward simulated in " + std::to_string(forward_simulation_steps) + " steps from\nStart: " + PrettyPrint::PrettyPrint(start_position) + "\nTarget: " + PrettyPrint::PrettyPrint(target_position) + "\nReached: " + PrettyPrint::PrettyPrint(reached_position);
@@ -217,17 +870,20 @@ namespace simple_particle_contact_simulator
             return std::pair<Configuration, bool>(reached_position, collided);
         }
 
-        inline bool CheckEnvironmentCollision(const Robot& robot, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const double collision_threshold) const
+        inline bool CheckEnvironmentCollision(const std::shared_ptr<BaseRobotType>& robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const double collision_threshold) const
         {
             const double real_collision_threshold = collision_threshold - (solver_config_.environment_collision_check_tolerance * this->environment_sdf_.GetResolution());
             // Now, go through the links and points of the robot for collision checking
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                // Use this in the future to check radius on sphere-based models
+                //const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
                 // Get the transform of the current link
-                const Eigen::Isometry3d link_transform = robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = robot->GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -276,7 +932,7 @@ namespace simple_particle_contact_simulator
             return false;
         }
 
-        inline std::map<std::pair<size_t, size_t>, Eigen::Vector3d> ExtractSelfCollidingPoints(const Robot& previous_robot, const Robot& current_robot, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const std::vector<std::pair<size_t, size_t>>& candidate_points, const std::map<size_t, double>& link_masses, const double time_interval) const
+        inline std::map<std::pair<size_t, size_t>, Eigen::Vector3d> ExtractSelfCollidingPoints(const std::shared_ptr<BaseRobotType>& previous_robot, const std::shared_ptr<BaseRobotType>& current_robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const std::vector<std::pair<size_t, size_t>>& candidate_points, const std::map<size_t, double>& link_masses, const double time_interval) const
         {
             if (candidate_points.size() > 1)
             {
@@ -301,7 +957,7 @@ namespace simple_particle_contact_simulator
                             {
                                 const size_t fitr_link = fitr->first;
                                 const size_t sitr_link = sitr->first;
-                                const bool self_collision_allowed = current_robot.CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
+                                const bool self_collision_allowed = static_cast<DerivedRobotType*>(current_robot.get())->CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
                                 if (self_collision_allowed == false)
                                 {
                                     //const std::string msg = "Self collisions not allowed between " + std::to_string(fitr_link) + " and " + std::to_string(sitr_link);
@@ -328,15 +984,15 @@ namespace simple_particle_contact_simulator
                         // Skip links we already filtered out due to allowed self collision
                         if (link_collisions.find(link_idx) != link_collisions.end())
                         {
-                            const std::string& link_name = robot_links_points[link_itr->first].first;
-                            const Eigen::Isometry3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
-                            const Eigen::Isometry3d current_link_transform = current_robot.GetLinkTransform(link_name);
+                            const std::string& link_name = robot_link_geometries[link_itr->first].first;
+                            const Eigen::Isometry3d previous_link_transform = previous_robot->GetLinkTransform(link_name);
+                            const Eigen::Isometry3d current_link_transform = current_robot->GetLinkTransform(link_name);
                             const std::vector<size_t>& link_points = link_itr->second;
                             Eigen::Vector4d link_momentum_vector(0.0, 0.0, 0.0, 0.0);
                             for (size_t idx = 0; idx < link_points.size(); idx++)
                             {
                                 const size_t link_point = link_points[idx];
-                                const Eigen::Vector4d& link_relative_point = (*robot_links_points[link_idx].second)[link_point];
+                                const Eigen::Vector4d& link_relative_point = (*robot_link_geometries[link_idx].second.Geometry())[link_point];
                                 const Eigen::Vector4d previous_point_location = previous_link_transform * link_relative_point;
                                 const Eigen::Vector4d current_point_location = current_link_transform * link_relative_point;
                                 const Eigen::Vector4d point_motion = current_point_location - previous_point_location;
@@ -358,9 +1014,9 @@ namespace simple_particle_contact_simulator
                     for (auto link_itr = link_collisions.begin(); link_itr != link_collisions.end(); ++link_itr)
                     {
                         const size_t link_idx = link_itr->first;
-                        const std::string& link_name = robot_links_points[link_idx].first;
-                        const Eigen::Isometry3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
-                        const Eigen::Vector4d& link_point = (*robot_links_points[link_idx].second)[point_self_collision_check_map[link_idx].front()];
+                        const std::string& link_name = robot_link_geometries[link_idx].first;
+                        const Eigen::Isometry3d previous_link_transform = previous_robot->GetLinkTransform(link_name);
+                        const Eigen::Vector4d& link_point = (*robot_link_geometries[link_idx].second.Geometry())[point_self_collision_check_map[link_idx].front()];
                         const Eigen::Vector4d link_point_location = previous_link_transform * link_point;
                         const std::vector<size_t>& colliding_links = link_itr->second;
                         const auto link_momentum_vector_query = link_momentum_vectors.find(link_idx);
@@ -385,9 +1041,9 @@ namespace simple_particle_contact_simulator
                         for (int64_t collision = 0; collision < (int64_t)colliding_links.size(); collision++)
                         {
                             const size_t other_link_idx = colliding_links[(size_t)collision];
-                            const std::string& other_link_name = robot_links_points[other_link_idx].first;
-                            const Eigen::Isometry3d previous_other_link_transform = previous_robot.GetLinkTransform(other_link_name);
-                            const Eigen::Vector4d& other_link_point = (*robot_links_points[other_link_idx].second)[point_self_collision_check_map[other_link_idx].front()];
+                            const std::string& other_link_name = robot_link_geometries[other_link_idx].first;
+                            const Eigen::Isometry3d previous_other_link_transform = previous_robot->GetLinkTransform(other_link_name);
+                            const Eigen::Vector4d& other_link_point = (*robot_link_geometries[other_link_idx].second.Geometry())[point_self_collision_check_map[other_link_idx].front()];
                             const Eigen::Vector4d other_link_point_location = previous_other_link_transform * other_link_point;
                             // Compute the contact normal
                             //const Eigen::Vector3d other_link_velocity = link_momentum_vectors[other_link_idx] / (double)point_self_collision_check_map[other_link_idx].size();
@@ -476,17 +1132,17 @@ namespace simple_particle_contact_simulator
             return std::vector<int64_t>{x_cell, y_cell, z_cell};
         }
 
-        inline std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> CollectSelfCollisions(const Robot& previous_robot, const Robot& current_robot, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const double time_interval) const
+        inline std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> CollectSelfCollisions(const std::shared_ptr<BaseRobotType>& previous_robot, const std::shared_ptr<BaseRobotType>& current_robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const double time_interval) const
         {
             // Note that robots with only one link *cannot* self-collide!
-            if (robot_links_points.size() == 1)
+            if (robot_link_geometries.size() == 1)
             {
                 return std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>();
             }
-            else if (robot_links_points.size() == 2)
+            else if (robot_link_geometries.size() == 2)
             {
                 // If the robot is only two links, and self-collision between them is allowed, we can avoid checks
-                if (current_robot.CheckIfSelfCollisionAllowed(0, 1))
+                if (static_cast<DerivedRobotType*>(current_robot.get())->CheckIfSelfCollisionAllowed(0, 1))
                 {
                     return std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>();
                 }
@@ -495,13 +1151,16 @@ namespace simple_particle_contact_simulator
             std::unordered_map<VoxelGrid::GRID_INDEX, std::vector<std::pair<size_t, size_t>>> self_collision_check_map;
             // Now, go through the links and points of the robot for collision checking
             bool any_candidate_self_collisions = false;
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                // Use this in the future for radius information
+                //const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
                 // Get the transform of the current link
-                const Eigen::Isometry3d link_transform = current_robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = current_robot->GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -536,9 +1195,13 @@ namespace simple_particle_contact_simulator
             // Compute approximate link masses (in reverse order, since each link's mass is its mass + mass of all further links
             std::map<size_t, double> link_masses;
             double previous_link_masses = 0.0;
-            for (int64_t link_idx = ((int64_t)robot_links_points.size() - 1); link_idx >= 0; link_idx--)
+            for (int64_t link_idx = ((int64_t)robot_link_geometries.size() - 1); link_idx >= 0; link_idx--)
             {
-                const double link_mass = (double)((*robot_links_points[(size_t)link_idx].second).size());
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                // Use this in the future for radius information
+                //const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
+                const double link_mass = (double)(link_points.size());
                 link_masses[(size_t)link_idx] = link_mass + previous_link_masses;
                 previous_link_masses += link_mass;
             }
@@ -550,12 +1213,12 @@ namespace simple_particle_contact_simulator
                 //const VoxelGrid::GRID_INDEX& location = itr->first;
                 const std::vector<std::pair<size_t, size_t>>& candidate_points = itr->second;
                 //std::cout << "Candidate points: " << PrettyPrint::PrettyPrint(candidate_points) << std::endl;
-                const std::map<std::pair<size_t, size_t>, Eigen::Vector3d> self_colliding_points = ExtractSelfCollidingPoints(previous_robot, current_robot, robot_links_points, candidate_points, link_masses, time_interval);
+                const std::map<std::pair<size_t, size_t>, Eigen::Vector3d> self_colliding_points = ExtractSelfCollidingPoints(previous_robot, current_robot, robot_link_geometries, candidate_points, link_masses, time_interval);
                 //std::cout << "Extracted points: " << PrettyPrint::PrettyPrint(self_colliding_points) << std::endl;
-                for (auto spcitr = self_colliding_points.begin(); spcitr != self_colliding_points.end(); ++spcitr)
+                for (auto scpitr = self_colliding_points.begin(); scpitr != self_colliding_points.end(); ++scpitr)
                 {
-                    const std::pair<size_t, size_t>& self_colliding_point = spcitr->first;
-                    const Eigen::Vector3d& correction = spcitr->second;
+                    const std::pair<size_t, size_t>& self_colliding_point = scpitr->first;
+                    const Eigen::Vector3d& correction = scpitr->second;
                     self_collisions[self_colliding_point] = correction;
                 }
             }
@@ -563,7 +1226,7 @@ namespace simple_particle_contact_simulator
             return self_collisions;
         }
 
-        inline bool CheckPointsForSelfCollision(const Robot& current_robot, const std::vector<std::pair<size_t, size_t>>& candidate_points) const
+        inline bool CheckPointsForSelfCollision(const std::shared_ptr<BaseRobotType>& current_robot, const std::vector<std::pair<size_t, size_t>>& candidate_points) const
         {
             if (candidate_points.size() > 1)
             {
@@ -587,7 +1250,7 @@ namespace simple_particle_contact_simulator
                             {
                                 const size_t fitr_link = fitr->first;
                                 const size_t sitr_link = sitr->first;
-                                const bool self_collision_allowed = current_robot.CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
+                                const bool self_collision_allowed = static_cast<DerivedRobotType*>(current_robot.get())->CheckIfSelfCollisionAllowed(fitr_link, sitr_link);
                                 if (self_collision_allowed == false)
                                 {
                                     return true;
@@ -610,17 +1273,17 @@ namespace simple_particle_contact_simulator
             }
         }
 
-        inline bool CheckSelfCollisions(const Robot& current_robot, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const double check_resolution) const
+        inline bool CheckSelfCollisions(const std::shared_ptr<BaseRobotType>& current_robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const double check_resolution) const
         {
             // Note that robots with only one link *cannot* self-collide!
-            if (robot_links_points.size() == 1)
+            if (robot_link_geometries.size() == 1)
             {
                 return false;
             }
-            else if (robot_links_points.size() == 2)
+            else if (robot_link_geometries.size() == 2)
             {
                 // If the robot is only two links, and self-collision between them is allowed, we can avoid checks
-                if (current_robot.CheckIfSelfCollisionAllowed(0, 1))
+                if (static_cast<DerivedRobotType*>(current_robot.get())->CheckIfSelfCollisionAllowed(0, 1))
                 {
                     return false;
                 }
@@ -629,13 +1292,16 @@ namespace simple_particle_contact_simulator
             std::unordered_map<VoxelGrid::GRID_INDEX, std::vector<std::pair<size_t, size_t>>> self_collision_check_map;
             // Now, go through the links and points of the robot for collision checking
             bool any_candidate_self_collisions = false;
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                // Use this in the future to check radius
+                //const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
                 // Get the transform of the current link
-                const Eigen::Isometry3d link_transform = current_robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d link_transform = current_robot->GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -681,15 +1347,15 @@ namespace simple_particle_contact_simulator
             return false;
         }
 
-        virtual bool CheckConfigCollision(const Robot& immutable_robot, const Configuration& config, const double inflation_ratio) const
+        virtual bool CheckConfigCollision(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& config, const double inflation_ratio) const
         {
-            Robot current_robot = immutable_robot;
-            current_robot.UpdatePosition(config);
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = current_robot.GetRawLinksPoints();
+            std::shared_ptr<BaseRobotType> current_robot(immutable_robot->Clone());
+            current_robot->SetPosition(config);
+            const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries = static_cast<DerivedRobotType*>(current_robot.get())->GetLinkGeometries();
             const double environment_collision_distance_threshold = inflation_ratio * this->environment_.GetResolution();
             const double self_collision_check_resolution = (inflation_ratio + 1.0) * this->environment_.GetResolution();
-            const bool env_collision = CheckEnvironmentCollision(current_robot, robot_links_points, environment_collision_distance_threshold);
-            const bool self_collision = CheckSelfCollisions(current_robot, robot_links_points, self_collision_check_resolution);
+            const bool env_collision = CheckEnvironmentCollision(current_robot, robot_link_geometries, environment_collision_distance_threshold);
+            const bool self_collision = CheckSelfCollisions(current_robot, robot_link_geometries, self_collision_check_resolution);
             //std::cout << self_collisions.size() << " self-colliding points to resolve" << std::endl;
             if (env_collision || self_collision)
             {
@@ -701,15 +1367,15 @@ namespace simple_particle_contact_simulator
             }
         }
 
-        inline std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> CheckCollision(const Robot& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const double time_interval) const
+        inline std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> CheckCollision(const std::shared_ptr<BaseRobotType>& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const double time_interval) const
         {
-            Robot current_robot = robot;
-            Robot previous_robot = robot;
+            std::shared_ptr<BaseRobotType> current_robot(robot->Clone());
+            std::shared_ptr<BaseRobotType> previous_robot(robot->Clone());
             // We need our own copies with a set config to use for kinematics!
-            current_robot.UpdatePosition(current_config);
-            previous_robot.UpdatePosition(previous_config);
-            const bool env_collision = CheckEnvironmentCollision(current_robot, robot_links_points, contact_distance_threshold_);
-            const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> self_collisions = CollectSelfCollisions(previous_robot, current_robot, robot_links_points, time_interval);
+            current_robot->SetPosition(current_config);
+            previous_robot->SetPosition(previous_config);
+            const bool env_collision = CheckEnvironmentCollision(current_robot, robot_link_geometries, contact_distance_threshold_);
+            const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d> self_collisions = CollectSelfCollisions(previous_robot, current_robot, robot_link_geometries, time_interval);
             //std::cout << self_collisions.size() << " self-colliding points to resolve" << std::endl;
             if (env_collision || (self_collisions.size() > 0))
             {
@@ -742,19 +1408,22 @@ namespace simple_particle_contact_simulator
             }
         }
 
-        inline double ComputeMaxPointPenetration(const Robot& current_robot, const Configuration& previous_config) const
+        inline double ComputeMaxPointPenetration(const std::shared_ptr<BaseRobotType>& current_robot, const Configuration& previous_config) const
         {
             UNUSED(previous_config);
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = current_robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries = static_cast<DerivedRobotType*>(current_robot.get())->GetLinkGeometries();
             // Find the point on the robot that moves the most
             double max_point_penetration = 0.0;
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                // Use this in the future to check radius
+                //const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
                 // Get the *current* transform of the current link
-                const Eigen::Isometry3d current_link_transform = current_robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d current_link_transform = current_robot->GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -772,20 +1441,23 @@ namespace simple_particle_contact_simulator
             return max_point_penetration;
         }
 
-        inline double EstimateMaxControlInputWorkspaceMotion(const Robot& start_robot, const Robot& end_robot) const
+        inline double EstimateMaxControlInputWorkspaceMotion(const std::shared_ptr<BaseRobotType>& start_robot, const std::shared_ptr<BaseRobotType>& end_robot) const
         {
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = start_robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries = static_cast<DerivedRobotType*>(start_robot.get())->GetLinkGeometries();
             // Find the point on the robot that moves the most
             double max_point_motion_squared = 0.0;
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector4d& link_points = *(robot_links_points[link_idx].second);
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                // Use this in the future for radius info
+                //const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
                 // Get the *current* transform of the current link
-                const Eigen::Isometry3d current_link_transform = start_robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d current_link_transform = start_robot->GetLinkTransform(link_name);
                 // Get the *next* transform of the current link
-                const Eigen::Isometry3d next_link_transform = end_robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d next_link_transform = end_robot->GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -806,26 +1478,26 @@ namespace simple_particle_contact_simulator
             return sqrt(max_point_motion_squared);
         }
 
-        inline double EstimateMaxControlInputWorkspaceMotion(const Robot& robot, const Configuration& start, const Configuration& end) const
+        inline double EstimateMaxControlInputWorkspaceMotion(const std::shared_ptr<BaseRobotType>& robot, const Configuration& start, const Configuration& end) const
         {
-            Robot start_robot = robot;
-            Robot end_robot = robot;
-            start_robot.UpdatePosition(start);
-            end_robot.UpdatePosition(end);
+            std::shared_ptr<BaseRobotType> start_robot(robot->Clone());
+            std::shared_ptr<BaseRobotType> end_robot(robot->Clone());
+            start_robot->SetPosition(start);
+            end_robot->SetPosition(end);
             return EstimateMaxControlInputWorkspaceMotion(start_robot, end_robot);
         }
 
-        inline double EstimateMaxControlInputWorkspaceMotion(const Robot& current_robot, const Eigen::VectorXd& control_input) const
+        inline double EstimateMaxControlInputWorkspaceMotion(const std::shared_ptr<BaseRobotType>& current_robot, const Eigen::VectorXd& control_input) const
         {
             // Apply the control input
-            Robot next_robot = current_robot;
-            next_robot.ApplyControlInput(control_input);
+            std::shared_ptr<BaseRobotType> next_robot(current_robot->Clone());
+            static_cast<DerivedRobotType*>(next_robot.get())->ApplyControlInput(control_input);
             return EstimateMaxControlInputWorkspaceMotion(current_robot, next_robot);
         }
 
-        inline std::pair<Configuration, std::pair<bool, bool>> ResolveForwardSimulation(const Robot& immutable_robot, const Eigen::VectorXd& control_input, const double controller_interval, RNG& rng, const bool use_individual_jacobians, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const uint64_t call_number, ros::Publisher& display_pub) const
+        inline std::pair<Configuration, std::pair<bool, bool>> ResolveForwardSimulation(const std::shared_ptr<BaseRobotType>& immutable_robot, const Eigen::VectorXd& control_input, const double controller_interval, RNG& rng, const bool use_individual_jacobians, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const uint64_t call_number, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
         {
-            Robot robot = immutable_robot;
+            std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
             const Eigen::VectorXd real_control_input = control_input * controller_interval;
             if (this->debug_level_ >= 25)
             {
@@ -833,7 +1505,7 @@ namespace simple_particle_contact_simulator
                 std::cout << msg1 << std::endl;
             }
             // Get the list of link name + link points for all the links of the robot
-            const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>> robot_links_points = robot.GetRawLinksPoints();
+            const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries = static_cast<DerivedRobotType*>(robot.get())->GetLinkGeometries();
             // Step along the control input
             // First, figure out how much workspace motion is actually going to result from the control input
             const double computed_step_motion = EstimateMaxControlInputWorkspaceMotion(robot, real_control_input);
@@ -874,18 +1546,18 @@ namespace simple_particle_contact_simulator
                     trace.resolver_steps.back().contact_resolver_steps.emplace_back();
                 }
                 // Store the previous configuration of the robot
-                const Configuration previous_configuration = robot.GetPosition();
+                const Configuration previous_configuration = robot->GetPosition();
                 // Update the position of the robot
-                robot.ApplyControlInput(control_input_step, rng);
-                const Configuration post_action_configuration = robot.GetPosition(rng);
-                robot.UpdatePosition(post_action_configuration);
+                static_cast<DerivedRobotType*>(robot.get())->ApplyControlInput(control_input_step, rng);
+                const Configuration post_action_configuration = robot->GetPosition();
+                robot->SetPosition(post_action_configuration);
                 const double apply_step_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, previous_configuration, post_action_configuration);
                 if (this->debug_level_ >= 25)
                 {
                     const std::string msg5 = "\x1b[35;1m [" + std::to_string(call_number) + "] Pre-action configuration: " + PrettyPrint::PrettyPrint(previous_configuration) + " \x1b[0m\n\x1b[33;1m [" + std::to_string(call_number) + "] Control input step: " + PrettyPrint::PrettyPrint(control_input_step) + "\n\x1b[33;1m [" + std::to_string(call_number) + "] Post-action configuration: " + PrettyPrint::PrettyPrint(post_action_configuration) + " \x1b[0m\n[" + std::to_string(call_number) + "] Max point motion (apply step) was: " + std::to_string(apply_step_max_motion);
                     std::cout << msg5 << std::endl;
                 }
-                std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, previous_configuration, post_action_configuration, robot_links_points, controller_interval);
+                std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> collision_check = CheckCollision(robot, previous_configuration, post_action_configuration, robot_link_geometries, controller_interval);
                 std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map = collision_check.second;
                 bool in_collision = collision_check.first;
                 if (in_collision)
@@ -904,7 +1576,7 @@ namespace simple_particle_contact_simulator
                     double correction_step_scaling = solver_config_.resolve_correction_initial_step_size;
                     while (in_collision)
                     {
-                        const auto point_jacobians_and_corrections = CollectPointCorrectionsAndJacobians(robot, previous_configuration, active_configuration, robot_links_points, self_collision_map, call_number, rng);
+                        const auto point_jacobians_and_corrections = CollectPointCorrectionsAndJacobians(robot, previous_configuration, active_configuration, robot_link_geometries, self_collision_map, call_number, rng);
 
                         const Eigen::VectorXd raw_correction_step = (use_individual_jacobians) ? ComputeResolverCorrectionStepIndividualJacobians(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second) : ComputeResolverCorrectionStepStackedJacobian(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second);
                         const double correction_step_motion_estimate = EstimateMaxControlInputWorkspaceMotion(robot, raw_correction_step);
@@ -929,7 +1601,7 @@ namespace simple_particle_contact_simulator
                                 std::cout << msg8 << std::endl;
                             }
                             // Apply correction step
-                            robot.ApplyControlInput(real_correction_step);
+                            static_cast<DerivedRobotType*>(robot.get())->ApplyControlInput(real_correction_step);
                             const double post_resolve_max_penetration = ComputeMaxPointPenetration(robot, previous_configuration);
                             num_micro_ops++;
                             if (post_resolve_max_penetration <= pre_resolve_max_penetration)
@@ -939,10 +1611,10 @@ namespace simple_particle_contact_simulator
                             else
                             {
                                 allowed_resolve_distance *= 0.75;
-                                robot.UpdatePosition(active_configuration);
+                                robot->SetPosition(active_configuration);
                             }
                         }
-                        const Configuration post_resolve_configuration = robot.GetPosition();
+                        const Configuration post_resolve_configuration = robot->GetPosition();
                         const double post_resolve_max_penetration = ComputeMaxPointPenetration(robot, previous_configuration);
                         assert(post_resolve_max_penetration <= pre_resolve_max_penetration);
                         if (this->debug_level_ >= 25)
@@ -966,12 +1638,12 @@ namespace simple_particle_contact_simulator
                             std::cout << msg8 << std::endl;
                         }
                         // Apply correction step
-                        robot.ApplyControlInput(real_correction_step);
-                        const Configuration post_resolve_configuration = robot.GetPosition();
+                        static_cast<DerivedRobotType*>(robot.get())->ApplyControlInput(real_correction_step);
+                        const Configuration post_resolve_configuration = robot->GetPosition();
 #endif
                         active_configuration = post_resolve_configuration;
                         // Check to see if we're still in collision
-                        const std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> new_collision_check = CheckCollision(robot, previous_configuration, active_configuration, robot_links_points, controller_interval);
+                        const std::pair<bool, std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>> new_collision_check = CheckCollision(robot, previous_configuration, active_configuration, robot_link_geometries, controller_interval);
                         // Update the self-collision map
                         self_collision_map = new_collision_check.second;
                         // Update the collision check variable
@@ -1005,12 +1677,14 @@ namespace simple_particle_contact_simulator
                             if (this->debug_level_ >= 2)
                             {
                                 const std_msgs::ColorRGBA config_color = (self_collision_map.size() > 0) ? this->MakeColor(0.5, 0.0, 0.0, 1.0) : this->MakeColor(0.0, 0.0, 0.5, 1.0);
-                                visualization_msgs::Marker active_config_marker = this->DrawRobotConfiguration(robot, active_configuration, config_color);
-                                active_config_marker.ns = (self_collision_map.size() > 0) ? "failed_self_collision_resolves" : "failed_env_collision_resolves";
-                                active_config_marker.id = (self_collision_map.size() > 0) ? (int)unsuccessful_self_collision_resolves_.load() : (int)unsuccessful_env_collision_resolves_.load();
-                                visualization_msgs::MarkerArray markers;
-                                markers.markers = {active_config_marker};
-                                display_pub.publish(markers);
+                                const std::string active_config_markers_ns = (self_collision_map.size() > 0) ? "failed_self_collision_resolves" : "failed_env_collision_resolves";
+                                visualization_msgs::MarkerArray active_config_markers = this->MakeConfigurationDisplayRep(robot, active_configuration, config_color, 1, active_config_markers_ns);
+                                const int32_t active_config_markers_idx_offset = (self_collision_map.size() > 0) ? (int32_t)unsuccessful_self_collision_resolves_.load() * (int32_t)active_config_markers.markers.size() : (int32_t)unsuccessful_env_collision_resolves_.load() * (int32_t)active_config_markers.markers.size();
+                                for (size_t mdx = 0; mdx < active_config_markers.markers.size(); mdx++)
+                                {
+                                    active_config_markers.markers[mdx].id += active_config_markers_idx_offset;
+                                }
+                                display_fn(active_config_markers);
                             }
                             if (this->debug_level_ >= 30)
                             {
@@ -1074,7 +1748,7 @@ namespace simple_particle_contact_simulator
             }
             if (this->debug_level_ >= 2)
             {
-                const std::string msg14 = "\x1b[32;1m [" + std::to_string(call_number) + "] Resolved action, post-action resolution configuration: " + PrettyPrint::PrettyPrint(robot.GetPosition()) + " \x1b[0m";
+                const std::string msg14 = "\x1b[32;1m [" + std::to_string(call_number) + "] Resolved action, post-action resolution configuration: " + PrettyPrint::PrettyPrint(robot->GetPosition()) + " \x1b[0m";
                 std::cout << msg14 << std::endl;
             }
             successful_resolves_.fetch_add(1);
@@ -1090,31 +1764,34 @@ namespace simple_particle_contact_simulator
             {
                 free_resolves_.fetch_add(1);
             }
-            return std::make_pair(robot.GetPosition(), std::make_pair(collided, false));
+            return std::make_pair(robot->GetPosition(), std::make_pair(collided, false));
         }
 
-        inline std::pair<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Matrix<double, Eigen::Dynamic, 1>> CollectPointCorrectionsAndJacobians(const Robot& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, std::shared_ptr<EigenHelpers::VectorVector4d>>>& robot_links_points, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map, const uint64_t call_number, RNG& rng) const
+        inline std::pair<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Matrix<double, Eigen::Dynamic, 1>> CollectPointCorrectionsAndJacobians(const std::shared_ptr<BaseRobotType>& robot, const Configuration& previous_config, const Configuration& current_config, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const std::unordered_map<std::pair<size_t, size_t>, Eigen::Vector3d>& self_collision_map, const uint64_t call_number, RNG& rng) const
         {
             UNUSED(rng);
-            Robot current_robot = robot;
-            Robot previous_robot = robot;
+            std::shared_ptr<BaseRobotType> current_robot(robot->Clone());
+            std::shared_ptr<BaseRobotType> previous_robot(robot->Clone());
             // We need our own copy with a set config to use for kinematics!
-            current_robot.UpdatePosition(current_config);
-            previous_robot.UpdatePosition(previous_config);
+            current_robot->SetPosition(current_config);
+            previous_robot->SetPosition(previous_config);
             // In case a collision has occured, we need to compute a "collision gradient" that will push the robot out of collision
             // The "collision gradient" is of the form qgradient = J(q)+ * xgradient
             // Make space for the xgradient and Jacobian
             Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> robot_jacobians;
             Eigen::Matrix<double, Eigen::Dynamic, 1> point_corrections;
             // Now, go through the links and points of the robot to build up the xgradient and Jacobian
-            for (size_t link_idx = 0; link_idx < robot_links_points.size(); link_idx++)
+            for (size_t link_idx = 0; link_idx < robot_link_geometries.size(); link_idx++)
             {
                 // Grab the link name and points
-                const std::string& link_name = robot_links_points[link_idx].first;
-                const EigenHelpers::VectorVector4d& link_points = (*robot_links_points[link_idx].second);
+                const std::string& link_name = robot_link_geometries[link_idx].first;
+                const simple_robot_models::PointSphereGeometry& link_geometry = robot_link_geometries[link_idx].second;
+                // Use this in the future for radius info
+                //const simple_robot_models::PointSphereGeometry::MODEL_GEOMETRY_TYPE& link_geometry_type = link_geometry.GeometryType();
+                const EigenHelpers::VectorVector4d& link_points = *(link_geometry.Geometry());
                 // Get the transform of the current link
-                const Eigen::Isometry3d previous_link_transform = previous_robot.GetLinkTransform(link_name);
-                const Eigen::Isometry3d current_link_transform = current_robot.GetLinkTransform(link_name);
+                const Eigen::Isometry3d previous_link_transform = previous_robot->GetLinkTransform(link_name);
+                const Eigen::Isometry3d current_link_transform = current_robot->GetLinkTransform(link_name);
                 // Now, go through the points of the link
                 for (size_t point_idx = 0; point_idx < link_points.size(); point_idx++)
                 {
@@ -1130,7 +1807,7 @@ namespace simple_particle_contact_simulator
                     std::pair<bool, Eigen::Vector3d> env_collision_correction(false, Eigen::Vector3d(0.0, 0.0, 0.0));
                     const Eigen::Vector4d& link_relative_point = link_points[point_idx];
                     // Get the Jacobian for the current point
-                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = current_robot.ComputeLinkPointJacobian(link_name, link_relative_point);
+                    const Eigen::Matrix<double, 3, Eigen::Dynamic> point_jacobian = current_robot->ComputeLinkPointTranslationJacobian(link_name, link_relative_point);
                     // Transform the link point into the environment frame
                     const Eigen::Vector4d previous_point_location = previous_link_transform * link_relative_point;
                     const Eigen::Vector4d current_point_location = current_link_transform * link_relative_point;

@@ -73,10 +73,14 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${OpenMP_SHARED_LINK
 #set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 
 set(FAST_KINEMATIC_SIMULATOR_SOURCES
+    include/${PROJECT_NAME}/simple_pid_controller.hpp
+    include/${PROJECT_NAME}/simple_uncertainty_models.hpp
     include/${PROJECT_NAME}/simulator_environment_builder.hpp
     include/${PROJECT_NAME}/simple_particle_contact_simulator.hpp
+    include/${PROJECT_NAME}/tnuva_robot_models.hpp
     include/${PROJECT_NAME}/fast_kinematic_simulator.hpp
     src/${PROJECT_NAME}/simulator_environment_builder.cpp
+    src/${PROJECT_NAME}/tnuva_robot_models.cpp
     src/${PROJECT_NAME}/fast_kinematic_simulator.cpp)
 
 ###################################################################################################################
