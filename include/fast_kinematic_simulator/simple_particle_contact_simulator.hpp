@@ -344,6 +344,8 @@ namespace simple_particle_contact_simulator
 
     struct SimulatorSolverParameters
     {
+        double forward_simulation_time;
+        double simulation_shortcut_distance;
         double environment_collision_check_tolerance;
         double resolve_correction_step_scaling_decay_rate;
         double resolve_correction_initial_step_size;
@@ -354,6 +356,8 @@ namespace simple_particle_contact_simulator
 
         SimulatorSolverParameters()
         {
+            forward_simulation_time = 1.0;
+            simulation_shortcut_distance = 0.0;
             environment_collision_check_tolerance = 0.001;
             resolve_correction_step_scaling_decay_rate = 0.5;
             resolve_correction_initial_step_size = 1.0;
@@ -381,6 +385,7 @@ namespace simple_particle_contact_simulator
         double simulation_controller_interval_;
         double contact_distance_threshold_;
         double resolution_distance_threshold_;
+        int32_t debug_level_;
         SimulatorSolverParameters solver_config_;
         mutable std::vector<RNG> rngs_;
         mutable std::atomic<uint64_t> simulation_call_;
@@ -411,8 +416,9 @@ namespace simple_particle_contact_simulator
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        SimpleParticleContactSimulator(const sdf_tools::TaggedObjectCollisionMapGrid& environment, const sdf_tools::SignedDistanceField& environment_sdf, const SurfaceNormalGrid& surface_normals_grid, const SimulatorSolverParameters& solver_config, const double simulation_controller_frequency, const bool simulate_with_individual_jacobians, const uint64_t prng_seed, const int32_t debug_level) : simple_simulator_interface::SimulatorInterface<Configuration, RNG, ConfigAlloc>(debug_level), environment_(environment), environment_sdf_(environment_sdf), surface_normals_grid_(surface_normals_grid)
+        SimpleParticleContactSimulator(const sdf_tools::TaggedObjectCollisionMapGrid& environment, const sdf_tools::SignedDistanceField& environment_sdf, const SurfaceNormalGrid& surface_normals_grid, const SimulatorSolverParameters& solver_config, const double simulation_controller_frequency, const bool simulate_with_individual_jacobians, const uint64_t prng_seed, const int32_t debug_level) : simple_simulator_interface::SimulatorInterface<Configuration, RNG, ConfigAlloc>(), environment_(environment), environment_sdf_(environment_sdf), surface_normals_grid_(surface_normals_grid)
         {
+            debug_level_ = debug_level;
             simulate_with_individual_jacobians_ = simulate_with_individual_jacobians;
             contact_distance_threshold_ = 0.0;
             resolution_distance_threshold_ = 0.0;
@@ -434,6 +440,17 @@ namespace simple_particle_contact_simulator
             }
             ResetStatistics();
             initialized_ = true;
+        }
+
+        virtual int32_t GetDebugLevel() const
+        {
+            return debug_level_;
+        }
+
+        virtual int32_t SetDebugLevel(const int32_t debug_level)
+        {
+            debug_level_ = debug_level;
+            return debug_level_;
         }
 
         inline void ResetGenerators(const uint64_t prng_seed)
@@ -767,32 +784,62 @@ namespace simple_particle_contact_simulator
             return config_point;
         }
 
-        virtual std::vector<std::pair<Configuration, bool>> ForwardSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
+        virtual std::vector<std::pair<Configuration, std::pair<bool, bool>>> ForwardSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             if (start_positions.size() > 0)
             {
                 assert((target_positions.size() == 1) || (target_positions.size() == start_positions.size()));
             }
-            std::vector<std::pair<Configuration, bool>> propagated_points(start_positions.size());
+            std::vector<std::pair<Configuration, std::pair<bool, bool>>> propagated_points(start_positions.size());
             #pragma omp parallel for
             for (size_t idx = 0; idx < start_positions.size(); idx++)
             {
                 const Configuration& initial_particle = start_positions[idx];
                 const Configuration& target_position = (target_positions.size() == start_positions.size()) ? target_positions[idx] : target_positions.front();
                 simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
-                propagated_points[idx] = ForwardSimulateRobot(immutable_robot, initial_particle, target_position, forward_simulation_time, simulation_shortcut_distance, allow_contacts, trace, false, display_fn);
+                propagated_points[idx] = ForwardSimulateRobot(immutable_robot, initial_particle, target_position, allow_contacts, trace, false, display_fn);
             }
             return propagated_points;
         }
 
-        virtual std::pair<Configuration, bool> ForwardSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
+        virtual std::vector<std::pair<Configuration, std::pair<bool, bool>>> ReverseSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        {
+            if (start_positions.size() > 0)
+            {
+                assert((target_positions.size() == 1) || (target_positions.size() == start_positions.size()));
+            }
+            std::vector<std::pair<Configuration, std::pair<bool, bool>>> propagated_points(start_positions.size());
+            #pragma omp parallel for
+            for (size_t idx = 0; idx < start_positions.size(); idx++)
+            {
+                const Configuration& initial_particle = start_positions[idx];
+                const Configuration& target_position = (target_positions.size() == start_positions.size()) ? target_positions[idx] : target_positions.front();
+                simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc> trace;
+                propagated_points[idx] = ReverseSimulateRobot(immutable_robot, initial_particle, target_position, allow_contacts, trace, false, display_fn);
+            }
+            return propagated_points;
+        }
+
+        virtual std::pair<Configuration, std::pair<bool, bool>> ForwardSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
             static_cast<DerivedRobotType*>(robot.get())->ResetPosition(start_position);
-            return ForwardSimulateMutableRobot(robot, target_position, forward_simulation_time, simulation_shortcut_distance, allow_contacts, trace, enable_tracing, display_fn);
+            return ForwardSimulateMutableRobot(robot, target_position, allow_contacts, trace, enable_tracing, display_fn);
         }
 
-        virtual std::pair<Configuration, bool> ForwardSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const double forward_simulation_time, const double simulation_shortcut_distance, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn) const
+        virtual std::pair<Configuration, std::pair<bool, bool>> ReverseSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        {
+            std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
+            static_cast<DerivedRobotType*>(robot.get())->ResetPosition(start_position);
+            return ReverseSimulateMutableRobot(robot, target_position, allow_contacts, trace, enable_tracing, display_fn);
+        }
+
+        virtual std::pair<Configuration, std::pair<bool, bool>> ReverseSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        {
+            return ForwardSimulateMutableRobot(robot, target_position, allow_contacts, trace, enable_tracing, display_fn);
+        }
+
+        virtual std::pair<Configuration, std::pair<bool, bool>> ForwardSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
         #if defined(_OPENMP)
             const size_t th_id = (size_t)omp_get_thread_num();
@@ -805,9 +852,9 @@ namespace simple_particle_contact_simulator
             const Configuration start_position = robot->GetPosition();
             // Forward simulate for the provided number of steps
             bool collided = false;
-            const uint32_t forward_simulation_steps = std::max((uint32_t)(forward_simulation_time * simulation_controller_frequency_), 1u);
+            const uint32_t forward_simulation_steps = std::max((uint32_t)(solver_config_.forward_simulation_time * simulation_controller_frequency_), 1u);
             bool any_resolve_failed = false;
-            if (this->debug_level_ >= 1)
+            if (debug_level_ >= 1)
             {
                 const std::string msg = "[" + std::to_string(call_number) + "] Starting simulation:\nStart: " + PrettyPrint::PrettyPrint(start_position) + "\nTarget: " + PrettyPrint::PrettyPrint(target_position);
                 std::cout << msg << std::endl;
@@ -848,7 +895,7 @@ namespace simple_particle_contact_simulator
                     }
                     // Last, but not least, check if we've gotten close enough the target state to short-circut the simulation
                     const double target_distance = robot->ComputeConfigurationDistance(target_position);
-                    if (target_distance < simulation_shortcut_distance)
+                    if (target_distance < solver_config_.simulation_shortcut_distance)
                     {
                         break;
                     }
@@ -862,12 +909,12 @@ namespace simple_particle_contact_simulator
             }
             // Return the ending position of the robot and if it has collided during simulation
             const Configuration reached_position = robot->GetPosition();
-            if (this->debug_level_ >= 1)
+            if (debug_level_ >= 1)
             {
                 const std::string msg = "[" + std::to_string(call_number) + "] Forward simulated in " + std::to_string(forward_simulation_steps) + " steps from\nStart: " + PrettyPrint::PrettyPrint(start_position) + "\nTarget: " + PrettyPrint::PrettyPrint(target_position) + "\nReached: " + PrettyPrint::PrettyPrint(reached_position);
                 std::cout << msg << std::endl;
             }
-            return std::pair<Configuration, bool>(reached_position, collided);
+            return std::pair<Configuration, std::pair<bool, bool>>(reached_position, std::make_pair(collided, true));
         }
 
         inline bool CheckEnvironmentCollision(const std::shared_ptr<BaseRobotType>& robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const double collision_threshold) const
@@ -894,7 +941,7 @@ namespace simple_particle_contact_simulator
                     //const std::pair<double, bool> sdf_check = this->environment_sdf_.EstimateDistance(environment_relative_point);
                     if (sdf_check.second == false)
                     {
-                        if (this->debug_level_ >= 1)
+                        if (debug_level_ >= 1)
                         {
                             const std::string msg = "Point at " + PrettyPrint::PrettyPrint(environment_relative_point) + " out of bounds";
                             std::cerr << msg << std::endl;
@@ -908,7 +955,7 @@ namespace simple_particle_contact_simulator
                     {
                         if (sdf_check.first < (real_collision_threshold - this->environment_sdf_.GetResolution()))
                         {
-                            if (this->debug_level_ >= 25)
+                            if (debug_level_ >= 25)
                             {
                                 std::cout << "Point at " << PrettyPrint::PrettyPrint(environment_relative_point) << " in collision with SDF distance " << sdf_check.first << " and threshold " << real_collision_threshold;
                             }
@@ -919,7 +966,7 @@ namespace simple_particle_contact_simulator
                             const double estimated_distance = this->environment_sdf_.EstimateDistance4d(environment_relative_point).first;
                             if (estimated_distance < real_collision_threshold)
                             {
-                                if (this->debug_level_ >= 25)
+                                if (debug_level_ >= 25)
                                 {
                                     std::cout << "Point at " << PrettyPrint::PrettyPrint(environment_relative_point) << " in collision with SDF distance " << sdf_check.first << " and threshold " << real_collision_threshold;
                                 }
@@ -1499,7 +1546,7 @@ namespace simple_particle_contact_simulator
         {
             std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
             const Eigen::VectorXd real_control_input = control_input * controller_interval;
-            if (this->debug_level_ >= 25)
+            if (debug_level_ >= 25)
             {
                 const std::string msg1 = "[" + std::to_string(call_number) + "] Resolving control input: " + PrettyPrint::PrettyPrint(control_input) + "\nReal control input: " + PrettyPrint::PrettyPrint(real_control_input);
                 std::cout << msg1 << std::endl;
@@ -1512,7 +1559,7 @@ namespace simple_particle_contact_simulator
             const double target_microstep_distance = this->GetResolution() * 0.125;
             const double allowed_microstep_distance = this->GetResolution() * 1.0;
             const uint32_t number_microsteps = std::max(1u, ((uint32_t)ceil(computed_step_motion / target_microstep_distance)));
-            if (this->debug_level_ >= 2)
+            if (debug_level_ >= 2)
             {
                 const std::string msg3 = "[" + std::to_string(call_number) + "] Resolving simulation step with computed motion: " + std::to_string(computed_step_motion) + " in " + std::to_string(number_microsteps) + " microsteps";
                 std::cout << msg3 << std::endl;
@@ -1525,7 +1572,7 @@ namespace simple_particle_contact_simulator
                 std::cerr << msg << std::endl;
                 assert(false);
             }
-            if (this->debug_level_ >= 25)
+            if (debug_level_ >= 25)
             {
                 const std::string msg4 = "[" + std::to_string(call_number) + "] Control input step: " + PrettyPrint::PrettyPrint(control_input_step);
                 std::cout << msg4 << std::endl;
@@ -1552,7 +1599,7 @@ namespace simple_particle_contact_simulator
                 const Configuration post_action_configuration = robot->GetPosition();
                 robot->SetPosition(post_action_configuration);
                 const double apply_step_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, previous_configuration, post_action_configuration);
-                if (this->debug_level_ >= 25)
+                if (debug_level_ >= 25)
                 {
                     const std::string msg5 = "\x1b[35;1m [" + std::to_string(call_number) + "] Pre-action configuration: " + PrettyPrint::PrettyPrint(previous_configuration) + " \x1b[0m\n\x1b[33;1m [" + std::to_string(call_number) + "] Control input step: " + PrettyPrint::PrettyPrint(control_input_step) + "\n\x1b[33;1m [" + std::to_string(call_number) + "] Post-action configuration: " + PrettyPrint::PrettyPrint(post_action_configuration) + " \x1b[0m\n[" + std::to_string(call_number) + "] Max point motion (apply step) was: " + std::to_string(apply_step_max_motion);
                     std::cout << msg5 << std::endl;
@@ -1581,7 +1628,7 @@ namespace simple_particle_contact_simulator
                         const Eigen::VectorXd raw_correction_step = (use_individual_jacobians) ? ComputeResolverCorrectionStepIndividualJacobians(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second) : ComputeResolverCorrectionStepStackedJacobian(point_jacobians_and_corrections.first, point_jacobians_and_corrections.second);
                         const double correction_step_motion_estimate = EstimateMaxControlInputWorkspaceMotion(robot, raw_correction_step);
                         double allowed_resolve_distance = allowed_microstep_distance; //std::min(apply_step_max_motion, allowed_microstep_distance * 1.0); //was 0.25
-                        if (this->debug_level_ >= 25)
+                        if (debug_level_ >= 25)
                         {
                             const std::string msg7 = "[" + std::to_string(call_number) + "] Raw Cstep motion estimate: " + std::to_string(correction_step_motion_estimate) + " Allowed correction step motion: " + std::to_string(allowed_resolve_distance) + " Raw Cstep: " + PrettyPrint::PrettyPrint(raw_correction_step);
                             std::cout << msg7 << std::endl;
@@ -1595,7 +1642,7 @@ namespace simple_particle_contact_simulator
                         {
                             const double step_fraction = std::max((correction_step_motion_estimate / allowed_resolve_distance), 1.0);
                             const Eigen::VectorXd real_correction_step = (raw_correction_step / step_fraction) * std::abs(correction_step_scaling);
-                            if (this->debug_level_ >= 25)
+                            if (debug_level_ >= 25)
                             {
                                 const std::string msg8 = "[" + std::to_string(call_number) + "] Real scaled Cstep: " + PrettyPrint::PrettyPrint(real_correction_step);
                                 std::cout << msg8 << std::endl;
@@ -1617,14 +1664,14 @@ namespace simple_particle_contact_simulator
                         const Configuration post_resolve_configuration = robot->GetPosition();
                         const double post_resolve_max_penetration = ComputeMaxPointPenetration(robot, previous_configuration);
                         assert(post_resolve_max_penetration <= pre_resolve_max_penetration);
-                        if (this->debug_level_ >= 25)
+                        if (debug_level_ >= 25)
                         {
                             const double resolve_step_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, post_action_configuration, post_resolve_configuration);
                             const double iteration_max_motion = EstimateMaxControlInputWorkspaceMotion(robot, previous_configuration, post_resolve_configuration);
                             const std::string msg9 = "\x1b[36;1m [" + std::to_string(call_number) + "] Post-resolve step configuration after " + std::to_string(num_micro_ops) + " micro-ops: " + PrettyPrint::PrettyPrint(post_resolve_configuration) + " \x1b[0m\n[" + std::to_string(call_number) + "] Pre-resolve max penetration was: " + std::to_string(pre_resolve_max_penetration) + " Post-resolve max penetration was: " + std::to_string(post_resolve_max_penetration) + " Max point motion (resolve step) was: " + std::to_string(resolve_step_max_motion) + "\n[" + std::to_string(call_number) + "] Max point motion (iteration) was: " + std::to_string(iteration_max_motion);
                             std::cout << msg9 << std::endl;
                         }
-                        if (this->debug_level_ >= 26)
+                        if (debug_level_ >= 26)
                         {
                             std::cout << "Press ENTER to continue..." << std::endl;
                             std::cin.get();
@@ -1632,7 +1679,7 @@ namespace simple_particle_contact_simulator
 #else
                         const double step_fraction = std::max((correction_step_motion_estimate / allowed_resolve_distance), 1.0);
                         const Eigen::VectorXd real_correction_step = (raw_correction_step / step_fraction) * std::abs(correction_step_scaling);
-                        if (this->debug_level_ >= 25)
+                        if (debug_level_ >= 25)
                         {
                             const std::string msg8 = "[" + std::to_string(call_number) + "] Real scaled Cstep: " + PrettyPrint::PrettyPrint(real_correction_step);
                             std::cout << msg8 << std::endl;
@@ -1656,7 +1703,7 @@ namespace simple_particle_contact_simulator
                         }
                         if (resolver_iterations > solver_config_.max_resolver_iterations)
                         {
-                            if (this->debug_level_ >= 2)
+                            if (debug_level_ >= 2)
                             {
                                 const std::string msg10 = "\x1b[31;1m [" + std::to_string(call_number) + "] Resolver iterations > " + std::to_string(solver_config_.max_resolver_iterations) + ", terminating microstep+resolver at configuration " + PrettyPrint::PrettyPrint(active_configuration) + " and returning previous configuration " + PrettyPrint::PrettyPrint(previous_configuration) + "\nCollision check results:\n" + PrettyPrint::PrettyPrint(new_collision_check, false, "\n") + " \x1b[0m";
                                 std::cout << msg10 << std::endl;
@@ -1674,7 +1721,7 @@ namespace simple_particle_contact_simulator
                             {
                                 unsuccessful_env_collision_resolves_.fetch_add(1);
                             }
-                            if (this->debug_level_ >= 2)
+                            if (debug_level_ >= 2)
                             {
                                 const std_msgs::ColorRGBA config_color = (self_collision_map.size() > 0) ? this->MakeColor(0.5, 0.0, 0.0, 1.0) : this->MakeColor(0.0, 0.0, 0.5, 1.0);
                                 const std::string active_config_markers_ns = (self_collision_map.size() > 0) ? "failed_self_collision_resolves" : "failed_env_collision_resolves";
@@ -1686,7 +1733,7 @@ namespace simple_particle_contact_simulator
                                 }
                                 display_fn(active_config_markers);
                             }
-                            if (this->debug_level_ >= 30)
+                            if (debug_level_ >= 30)
                             {
                                 assert(false);
                             }
@@ -1712,7 +1759,7 @@ namespace simple_particle_contact_simulator
                             }
                         }
                     }
-                    if (this->debug_level_ >= 25)
+                    if (debug_level_ >= 25)
                     {
                         const std::string msg11 = "\x1b[31;1m [" + std::to_string(call_number) + "] Colliding microstep " + std::to_string(micro_step + 1u) + " resolved in " + std::to_string(resolver_iterations) + " iterations \x1b[0m";
                         std::cout << msg11 << std::endl;
@@ -1720,7 +1767,7 @@ namespace simple_particle_contact_simulator
                 }
                 else if (in_collision && (allow_contacts == false))
                 {
-                    if (this->debug_level_ >= 25)
+                    if (debug_level_ >= 25)
                     {
                         const std::string msg12 = "\x1b[31;1m [" + std::to_string(call_number) + "] Colliding microstep " + std::to_string(micro_step + 1u) + " trivially resolved in 1 iteration (allow_contacts==false) \x1b[0m";
                         std::cout << msg12 << std::endl;
@@ -1738,7 +1785,7 @@ namespace simple_particle_contact_simulator
                 }
                 else
                 {
-                    if (this->debug_level_ >= 25)
+                    if (debug_level_ >= 25)
                     {
                         const std::string msg13= "\x1b[31;1m [" + std::to_string(call_number) + "] Uncolliding microstep " + std::to_string(micro_step + 1u) + " trivially resolved in 1 iteration \x1b[0m";
                         std::cout << msg13 << std::endl;
@@ -1746,7 +1793,7 @@ namespace simple_particle_contact_simulator
                     continue;
                 }
             }
-            if (this->debug_level_ >= 2)
+            if (debug_level_ >= 2)
             {
                 const std::string msg14 = "\x1b[32;1m [" + std::to_string(call_number) + "] Resolved action, post-action resolution configuration: " + PrettyPrint::PrettyPrint(robot->GetPosition()) + " \x1b[0m";
                 std::cout << msg14 << std::endl;
@@ -1816,8 +1863,8 @@ namespace simple_particle_contact_simulator
                     if (current_sdf_check.second == false)
                     {
                         const std::string msg = "[" + std::to_string(call_number) + "] (Current) Point out of bounds: " + PrettyPrint::PrettyPrint(current_point_location);
-                        arc_helpers::ConditionalPrint(msg, 0, this->debug_level_);
-                        if (this->debug_level_ >= 5)
+                        arc_helpers::ConditionalPrint(msg, 0, debug_level_);
+                        if (debug_level_ >= 5)
                         {
                             assert(false);
                         }
@@ -1860,7 +1907,7 @@ namespace simple_particle_contact_simulator
                         Eigen::Vector3d point_correction(0.0, 0.0, 0.0);
                         if (self_collision_correction.first)
                         {
-                            if (this->debug_level_ >= 25)
+                            if (debug_level_ >= 25)
                             {
                                 std::cout << "Self-collision correction: " << PrettyPrint::PrettyPrint(self_collision_correction.second) << std::endl;
                             }
@@ -1868,7 +1915,7 @@ namespace simple_particle_contact_simulator
                         }
                         if (env_collision_correction.first)
                         {
-                            if (this->debug_level_ >= 25)
+                            if (debug_level_ >= 25)
                             {
                                 std::cout << "Env-collision correction: " << PrettyPrint::PrettyPrint(env_collision_correction.second) << std::endl;
                             }
@@ -1879,7 +1926,7 @@ namespace simple_particle_contact_simulator
                         extended_point_corrections.resize(point_corrections.rows() + 3, Eigen::NoChange);
                         extended_point_corrections << point_corrections,point_correction;
                         point_corrections = extended_point_corrections;
-                        if (this->debug_level_ >= 35)
+                        if (debug_level_ >= 35)
                         {
                             std::cout << "Point jacobian:\n" << point_jacobian << std::endl;
                             std::cout << "Point correction: " << PrettyPrint::PrettyPrint(point_correction) << std::endl;
