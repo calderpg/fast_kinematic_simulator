@@ -894,7 +894,7 @@ namespace simple_particle_contact_simulator
                         }
                     }
                     // Last, but not least, check if we've gotten close enough the target state to short-circut the simulation
-                    const double target_distance = robot->ComputeConfigurationDistance(target_position);
+                    const double target_distance = robot->ComputeConfigurationDistanceTo(target_position);
                     if (target_distance < solver_config_.simulation_shortcut_distance)
                     {
                         break;
@@ -937,7 +937,7 @@ namespace simple_particle_contact_simulator
                     // Transform the link point into the environment frame
                     const Eigen::Vector4d& link_relative_point = link_points[point_idx];
                     const Eigen::Vector4d environment_relative_point = link_transform * link_relative_point;
-                    const std::pair<float, bool> sdf_check = this->environment_sdf_.GetSafe4d(environment_relative_point);
+                    const std::pair<float, bool> sdf_check = this->environment_sdf_.GetImmutable4d(environment_relative_point);
                     //const std::pair<double, bool> sdf_check = this->environment_sdf_.EstimateDistance(environment_relative_point);
                     if (sdf_check.second == false)
                     {

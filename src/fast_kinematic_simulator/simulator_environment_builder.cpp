@@ -173,37 +173,37 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                     if (x > 1.0 && x <= 9.0 && y > 1.0 && y <= 9.0 && z > 1.0 && z<= 1.5)
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                     }
                     // "Right right"
                     if (x > 1.0 && x <= 9.0 && y > 1.0 && y <= 1.5 && z > 1.0 && z<= 9.0)
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 2u, 0u, 1u);
-                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                     }
                     // "Back back"
                     if (x > 1.0 && x <= 1.5 && y > 1.0 && y <= 9.0 && z > 1.0 && z<= 9.0)
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 3u, 0u, 1u);
-                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                     }
                     // "Top bottom"
                     if (x > 2.0 && x <= 7.0 && y > 2.0 && y <= 7.0 && z > 2.0 && z<= 2.5)
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 4u, 0u, 1u);
-                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                     }
                     // "Left right"
                     if (x > 2.0 && x <= 7.0 && y > 2.0 && y <= 2.5 && z > 2.0 && z<= 7.0)
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 5u, 0u, 1u);
-                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                     }
                     // "Front back"
                     if (x > 2.0 && x <= 2.5 && y > 2.0 && y <= 7.0 && z > 2.0 && z<= 7.0)
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 6u, 0u, 1u);
-                        grid.Set(x_idx, y_idx, z_idx, object_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                     }
                     // Set the free-space convex segment we belong to (if necessary)
                     if (grid.GetImmutable(x_idx, y_idx, z_idx).first.occupancy < 0.5)
@@ -300,7 +300,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                     if (x_idx <= 16 || y_idx <= 16 || z_idx <= 16 || x_idx >= (grid.GetNumXCells() - 16)  || y_idx >= (grid.GetNumYCells() - 16) || z_idx >= (grid.GetNumZCells() - 16))
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
-                        grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, buffer_cell);
                     }
                     else
                     {
@@ -309,28 +309,28 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                             if (x <= 2.0 || y <= 2.0)
                             {
                                 const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                                grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                             }
                             else if (x > 2.5 || y > 2.5)
                             {
                                 const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                                grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                             }
                             else if (z <= resolution)
                             {
                                 const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                                grid.Set(x_idx, y_idx, z_idx, object_cell);
+                                grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                             }
                             else
                             {
                                 const sdf_tools::TAGGED_OBJECT_COLLISION_CELL free_cell(0.0f, 0u, 0u, 0u);
-                                grid.Set(x_idx, y_idx, z_idx, free_cell);
+                                grid.SetValue(x_idx, y_idx, z_idx, free_cell);
                             }
                         }
                         else
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL free_cell(0.0f, 0u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, free_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, free_cell);
                         }
                     }
                     // Set the free-space convex segment we belong to (if necessary)
@@ -377,12 +377,12 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                     if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 1u, 0u, 0u);
-                        grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, buffer_cell);
                     }
                     else if (z_idx >= (grid.GetNumZCells() - 8))
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
-                        grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, buffer_cell);
                     }
                     else
                     {
@@ -390,37 +390,37 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                         if (x > 1.0 && x <= 3.0 && y > 1.0 && y <= 3.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 5.0 && x <= 8.0 && y > 0.0 && y <= 2.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 4.0 && x <= 9.0 && y > 3.0 && y <= 5.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 0.0 && x <= 2.0 && y > 4.0 && y <= 7.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 3.0 && x <= 6.0&& y > 6.0 && y <= 8.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 0.0 && x <= 5.0 && y > 9.0 && y <= 10.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 8.0 && x <= 10.0 && y > 6.0 && y <= 10.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else
                         {
@@ -518,13 +518,13 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                     if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8))
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 1u, 0u, 0u);
-                        grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, buffer_cell);
                     }
                     // Transparent top
                     else if (z_idx >= (grid.GetNumZCells() - 8))
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
-                        grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, buffer_cell);
                     }
                     else
                     {
@@ -532,12 +532,12 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                         if (y > 2.0 && y <= 4.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (y > 6.0 && y <= 8.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 7u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         // Main regions
                         if (y <= 2)
@@ -604,7 +604,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                     if (x_idx <= 8 || y_idx <= 8 || z_idx <= 8 || x_idx >= (grid.GetNumXCells() - 8) || y_idx >= (grid.GetNumYCells() - 8) || z_idx >= (grid.GetNumZCells() - 8))
                     {
                         const sdf_tools::TAGGED_OBJECT_COLLISION_CELL buffer_cell(1.0f, 0u, 0u, 0u);
-                        grid.Set(x_idx, y_idx, z_idx, buffer_cell);
+                        grid.SetValue(x_idx, y_idx, z_idx, buffer_cell);
                     }
                     else
                     {
@@ -612,58 +612,58 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                         if (x > 4.5 && x <= 5.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 1u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (y > 4.5 && y <= 5.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 2u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (z > 4.5 && z <= 5.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0f, 3u, 0u, 0u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         // Make the 8 interior voids
                         else if (x <= 4.5 && y <= 4.5 && z <= 4.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x <= 4.5 && y <= 4.5 && z > 5.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 2u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x <= 4.5 && y > 5.5 && z <= 4.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 4u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x <= 4.5 && y > 5.5 && z > 5.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 8u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 5.5 && y <= 4.5 && z <= 4.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 16u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 5.5 && y <= 4.5 && z > 5.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 32u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 5.5 && y > 5.5 && z <= 4.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 64u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 5.5 && y > 5.5 && z > 5.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(0.0f, 0u, 0u, 128u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         // Make the four x-axis oriented interior channels
                         if (y > 5.5 && y <= 7.0 && z > 5.5 && z <= 7.0)
@@ -1717,17 +1717,17 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                         if (x <= 2.0 || y <= 2.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (x > 2.5 || y > 2.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (z <= resolution)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                     }
                     else if (z <= 4.5)
@@ -1735,7 +1735,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                         if (y > 1.5 && y <= 5.0 && x > 3.0 && x <= 3.5)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                     }
                     // Set the free-space convex segment we belong to (if necessary)
@@ -1787,17 +1787,17 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
                         if (x <= 2.0 || y <= 2.0)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if ((x > 2.5 || y > 2.5) && (z <= 1.0))
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                         else if (z <= resolution)
                         {
                             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL object_cell(1.0, 1u, 0u, 1u);
-                            grid.Set(x_idx, y_idx, z_idx, object_cell);
+                            grid.SetValue(x_idx, y_idx, z_idx, object_cell);
                         }
                     }
                     // Set the free-space convex segment we belong to (if necessary)
@@ -2062,7 +2062,7 @@ sdf_tools::TaggedObjectCollisionMapGrid simulator_environment_builder::BuildEnvi
         {
             const Eigen::Vector3d& location = all_obstacle_cells[idx].first;
             const sdf_tools::TAGGED_OBJECT_COLLISION_CELL& cell = all_obstacle_cells[idx].second;
-            grid.Set(location.x(), location.y(), location.z(), cell);
+            grid.SetValue(location.x(), location.y(), location.z(), cell);
         }
         // Set the environment
         return grid;
@@ -2073,7 +2073,7 @@ void simulator_environment_builder::UpdateSurfaceNormalGridCell(const std::vecto
 {
     const Eigen::Vector3d world_location = transform * cell_location;
     // Let's check the penetration distance. We only want to update cells that are *actually* on the surface
-    const float distance = environment_sdf.Get3d(world_location);
+    const float distance = environment_sdf.GetImmutable3d(world_location).first;
     // If we're within one cell of the surface, we update
     if (distance > -(environment_sdf.GetResolution() * 1.5))
     {
@@ -2104,15 +2104,15 @@ void simulator_environment_builder::AdjustSurfaceNormalGridForAllFlatSurfaces(co
         {
             for (int64_t z_idx = 0; z_idx < environment_sdf.GetNumZCells(); z_idx++)
             {
-                const float distance = environment_sdf.Get(x_idx, y_idx, z_idx);
+                const float distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx).first;
                 if (distance < 0.0)
                 {
-                    const float xm1_distance = environment_sdf.Get(x_idx - 1, y_idx, z_idx);
-                    const float xp1_distance = environment_sdf.Get(x_idx + 1, y_idx, z_idx);
-                    const float ym1_distance = environment_sdf.Get(x_idx, y_idx - 1, z_idx);
-                    const float yp1_distance = environment_sdf.Get(x_idx, y_idx + 1, z_idx);
-                    const float zm1_distance = environment_sdf.Get(x_idx, y_idx, z_idx - 1);
-                    const float zp1_distance = environment_sdf.Get(x_idx, y_idx, z_idx + 1);
+                    const float xm1_distance = environment_sdf.GetImmutable(x_idx - 1, y_idx, z_idx).first;
+                    const float xp1_distance = environment_sdf.GetImmutable(x_idx + 1, y_idx, z_idx).first;
+                    const float ym1_distance = environment_sdf.GetImmutable(x_idx, y_idx - 1, z_idx).first;
+                    const float yp1_distance = environment_sdf.GetImmutable(x_idx, y_idx + 1, z_idx).first;
+                    const float zm1_distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx - 1).first;
+                    const float zp1_distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx + 1).first;
                     const bool xm1_edge = (xm1_distance > 0.0);
                     const bool xp1_edge = (xp1_distance > 0.0);
                     const bool ym1_edge = (ym1_distance > 0.0);
@@ -2176,7 +2176,7 @@ simple_particle_contact_simulator::SurfaceNormalGrid simulator_environment_build
         {
             for (int64_t z_idx = 0; z_idx < environment_sdf.GetNumZCells(); z_idx++)
             {
-                const float distance = environment_sdf.Get(x_idx, y_idx, z_idx);
+                const float distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx).first;
                 if (distance < 0.0)
                 {
                     const Eigen::Vector3d gradient = EigenHelpers::StdVectorDoubleToEigenVector3d(environment_sdf.GetGradient(x_idx, y_idx, z_idx, true));
@@ -2284,7 +2284,7 @@ simple_particle_contact_simulator::SurfaceNormalGrid simulator_environment_build
         {
             for (int64_t z_idx = 0; z_idx < environment_sdf.GetNumZCells(); z_idx++)
             {
-                const float distance = environment_sdf.Get(x_idx, y_idx, z_idx);
+                const float distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx).first;
                 if (distance < 0.0)
                 {
                     const Eigen::Vector3d gradient = EigenHelpers::StdVectorDoubleToEigenVector3d(environment_sdf.GetGradient(x_idx, y_idx, z_idx, true));
