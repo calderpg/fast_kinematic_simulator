@@ -373,6 +373,7 @@ namespace simple_particle_contact_simulator
     {
     protected:
 
+        typedef simple_simulator_interface::SimulationResult<Configuration> SimulationResult;
         typedef simple_robot_model_interface::SimpleRobotModelInterface<Configuration, ConfigAlloc> BaseRobotType;
 
         sdf_tools::TaggedObjectCollisionMapGrid environment_;
@@ -784,13 +785,13 @@ namespace simple_particle_contact_simulator
             return config_point;
         }
 
-        virtual std::vector<std::pair<Configuration, std::pair<bool, bool>>> ForwardSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        virtual std::vector<SimulationResult> ForwardSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             if (start_positions.size() > 0)
             {
                 assert((target_positions.size() == 1) || (target_positions.size() == start_positions.size()));
             }
-            std::vector<std::pair<Configuration, std::pair<bool, bool>>> propagated_points(start_positions.size());
+            std::vector<SimulationResult> propagated_points(start_positions.size());
             #pragma omp parallel for
             for (size_t idx = 0; idx < start_positions.size(); idx++)
             {
@@ -802,13 +803,13 @@ namespace simple_particle_contact_simulator
             return propagated_points;
         }
 
-        virtual std::vector<std::pair<Configuration, std::pair<bool, bool>>> ReverseSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        virtual std::vector<SimulationResult> ReverseSimulateRobots(const std::shared_ptr<BaseRobotType>& immutable_robot, const std::vector<Configuration, ConfigAlloc>& start_positions, const std::vector<Configuration, ConfigAlloc>& target_positions, const bool allow_contacts, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             if (start_positions.size() > 0)
             {
                 assert((target_positions.size() == 1) || (target_positions.size() == start_positions.size()));
             }
-            std::vector<std::pair<Configuration, std::pair<bool, bool>>> propagated_points(start_positions.size());
+            std::vector<SimulationResult> propagated_points(start_positions.size());
             #pragma omp parallel for
             for (size_t idx = 0; idx < start_positions.size(); idx++)
             {
@@ -820,26 +821,26 @@ namespace simple_particle_contact_simulator
             return propagated_points;
         }
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ForwardSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        virtual SimulationResult ForwardSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
             static_cast<DerivedRobotType*>(robot.get())->ResetPosition(start_position);
             return ForwardSimulateMutableRobot(robot, target_position, allow_contacts, trace, enable_tracing, display_fn);
         }
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ReverseSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        virtual SimulationResult ReverseSimulateRobot(const std::shared_ptr<BaseRobotType>& immutable_robot, const Configuration& start_position, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             std::shared_ptr<BaseRobotType> robot(immutable_robot->Clone());
             static_cast<DerivedRobotType*>(robot.get())->ResetPosition(start_position);
             return ReverseSimulateMutableRobot(robot, target_position, allow_contacts, trace, enable_tracing, display_fn);
         }
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ReverseSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        virtual SimulationResult ReverseSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
             return ForwardSimulateMutableRobot(robot, target_position, allow_contacts, trace, enable_tracing, display_fn);
         }
 
-        virtual std::pair<Configuration, std::pair<bool, bool>> ForwardSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
+        virtual SimulationResult ForwardSimulateMutableRobot(const std::shared_ptr<BaseRobotType>& robot, const Configuration& target_position, const bool allow_contacts, simple_simulator_interface::ForwardSimulationStepTrace<Configuration, ConfigAlloc>& trace, const bool enable_tracing, const std::function<void(const visualization_msgs::MarkerArray&)>& display_fn)
         {
         #if defined(_OPENMP)
             const size_t th_id = (size_t)omp_get_thread_num();
@@ -914,7 +915,7 @@ namespace simple_particle_contact_simulator
                 const std::string msg = "[" + std::to_string(call_number) + "] Forward simulated in " + std::to_string(forward_simulation_steps) + " steps from\nStart: " + PrettyPrint::PrettyPrint(start_position) + "\nTarget: " + PrettyPrint::PrettyPrint(target_position) + "\nReached: " + PrettyPrint::PrettyPrint(reached_position);
                 std::cout << msg << std::endl;
             }
-            return std::pair<Configuration, std::pair<bool, bool>>(reached_position, std::make_pair(collided, true));
+            return SimulationResult(reached_position, target_position, collided, true);
         }
 
         inline bool CheckEnvironmentCollision(const std::shared_ptr<BaseRobotType>& robot, const std::vector<std::pair<std::string, simple_robot_models::PointSphereGeometry>>& robot_link_geometries, const double collision_threshold) const

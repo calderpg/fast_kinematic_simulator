@@ -60,17 +60,12 @@ namespace simulator_environment_builder
     /* Discretize a cuboid obstacle to resolution-sized cells */
     std::vector<std::pair<Eigen::Vector3d, sdf_tools::TAGGED_OBJECT_COLLISION_CELL>> DiscretizeObstacle(const OBSTACLE_CONFIG& obstacle, const double resolution);
 
-    /* Build certain special case environments */
-    sdf_tools::TaggedObjectCollisionMapGrid BuildEnvironment(const std::string& environment_id, const double resolution);
-
     /* Build a new environment from the provided obstacles */
     sdf_tools::TaggedObjectCollisionMapGrid BuildEnvironment(const std::vector<OBSTACLE_CONFIG>& obstacles, const double resolution);
 
     void UpdateSurfaceNormalGridCell(const std::vector<RawCellSurfaceNormal>& raw_surface_normals, const Eigen::Isometry3d& transform, const Eigen::Vector3d& cell_location, const sdf_tools::SignedDistanceField& environment_sdf, simple_particle_contact_simulator::SurfaceNormalGrid& surface_normals_grid);
 
     void AdjustSurfaceNormalGridForAllFlatSurfaces(const sdf_tools::SignedDistanceField& environment_sdf, simple_particle_contact_simulator::SurfaceNormalGrid& surface_normals_grid);
-
-    simple_particle_contact_simulator::SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::string& environment_id, const sdf_tools::SignedDistanceField& environment_sdf);
 
     simple_particle_contact_simulator::SurfaceNormalGrid BuildSurfaceNormalsGrid(const std::vector<OBSTACLE_CONFIG>& obstacles, const sdf_tools::SignedDistanceField& environment_sdf);
 
@@ -103,8 +98,6 @@ namespace simulator_environment_builder
     };
 
     EnvironmentComponents BuildCompleteEnvironment(const std::vector<OBSTACLE_CONFIG>& obstacles, const double resolution);
-
-    EnvironmentComponents BuildCompleteEnvironment(const std::string& environment_id, const double resolution);
 }
 
 #endif // SIMULATOR_ENVIRONMENT_BUILDER_HPP
