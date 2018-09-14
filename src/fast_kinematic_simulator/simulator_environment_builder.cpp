@@ -163,7 +163,7 @@ void simulator_environment_builder::UpdateSurfaceNormalGridCell(const std::vecto
 {
     const Eigen::Vector3d world_location = transform * cell_location;
     // Let's check the penetration distance. We only want to update cells that are *actually* on the surface
-    const float distance = environment_sdf.GetImmutable3d(world_location).first;
+    const float distance = environment_sdf.GetImmutable3d(world_location).Value();
     // If we're within one cell of the surface, we update
     if (distance > -(environment_sdf.GetResolution() * 1.5))
     {
@@ -194,15 +194,15 @@ void simulator_environment_builder::AdjustSurfaceNormalGridForAllFlatSurfaces(co
         {
             for (int64_t z_idx = 0; z_idx < environment_sdf.GetNumZCells(); z_idx++)
             {
-                const float distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx).first;
+                const float distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx).Value();
                 if (distance < 0.0)
                 {
-                    const float xm1_distance = environment_sdf.GetImmutable(x_idx - 1, y_idx, z_idx).first;
-                    const float xp1_distance = environment_sdf.GetImmutable(x_idx + 1, y_idx, z_idx).first;
-                    const float ym1_distance = environment_sdf.GetImmutable(x_idx, y_idx - 1, z_idx).first;
-                    const float yp1_distance = environment_sdf.GetImmutable(x_idx, y_idx + 1, z_idx).first;
-                    const float zm1_distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx - 1).first;
-                    const float zp1_distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx + 1).first;
+                    const float xm1_distance = environment_sdf.GetImmutable(x_idx - 1, y_idx, z_idx).Value();
+                    const float xp1_distance = environment_sdf.GetImmutable(x_idx + 1, y_idx, z_idx).Value();
+                    const float ym1_distance = environment_sdf.GetImmutable(x_idx, y_idx - 1, z_idx).Value();
+                    const float yp1_distance = environment_sdf.GetImmutable(x_idx, y_idx + 1, z_idx).Value();
+                    const float zm1_distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx - 1).Value();
+                    const float zp1_distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx + 1).Value();
                     const bool xm1_edge = (xm1_distance > 0.0);
                     const bool xp1_edge = (xp1_distance > 0.0);
                     const bool ym1_edge = (ym1_distance > 0.0);
@@ -266,7 +266,7 @@ simple_particle_contact_simulator::SurfaceNormalGrid simulator_environment_build
         {
             for (int64_t z_idx = 0; z_idx < environment_sdf.GetNumZCells(); z_idx++)
             {
-                const float distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx).first;
+                const float distance = environment_sdf.GetImmutable(x_idx, y_idx, z_idx).Value();
                 if (distance < 0.0)
                 {
                     const Eigen::Vector3d gradient = EigenHelpers::StdVectorDoubleToEigenVector3d(environment_sdf.GetGradient(x_idx, y_idx, z_idx, true));

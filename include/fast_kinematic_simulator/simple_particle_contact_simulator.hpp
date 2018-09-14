@@ -212,10 +212,10 @@ namespace simple_particle_contact_simulator
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector3d& direction) const
         {
             assert(initialized_);
-            const std::pair<const std::vector<StoredSurfaceNormal>&, bool> lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
-            if (lookup.second)
+            const auto lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
+            if (lookup)
             {
-                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.first;
+                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.Value();
                 if (stored_surface_normals.size() == 0)
                 {
                     return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), true);
@@ -235,10 +235,10 @@ namespace simple_particle_contact_simulator
         inline std::pair<Eigen::Vector3d, bool> LookupSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector4d& direction) const
         {
             assert(initialized_);
-            const std::pair<const std::vector<StoredSurfaceNormal>&, bool> lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
-            if (lookup.second)
+            const auto lookup = surface_normal_grid_.GetImmutable(x_index, y_index, z_index);
+            if (lookup)
             {
-                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.first;
+                const std::vector<StoredSurfaceNormal>& stored_surface_normals = lookup.Value();
                 if (stored_surface_normals.size() == 0)
                 {
                     return std::pair<Eigen::Vector3d, bool>(Eigen::Vector3d(0.0, 0.0, 0.0), true);
@@ -285,10 +285,10 @@ namespace simple_particle_contact_simulator
         inline bool InsertSurfaceNormal(const int64_t x_index, const int64_t y_index, const int64_t z_index, const Eigen::Vector3d& surface_normal, const Eigen::Vector3d& entry_direction)
         {
             assert(initialized_);
-            std::pair<std::vector<StoredSurfaceNormal>&, bool> cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
-            if (cell_query.second)
+            auto cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
+            if (cell_query)
             {
-                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.first;
+                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.Value();
                 cell_normals.push_back(StoredSurfaceNormal(surface_normal, entry_direction));
                 return true;
             }
@@ -328,10 +328,10 @@ namespace simple_particle_contact_simulator
         inline bool ClearStoredSurfaceNormals(const int64_t x_index, const int64_t y_index, const int64_t z_index)
         {
             assert(initialized_);
-            std::pair<std::vector<StoredSurfaceNormal>&, bool> cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
-            if (cell_query.second)
+            auto cell_query = surface_normal_grid_.GetMutable(x_index, y_index, z_index);
+            if (cell_query)
             {
-                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.first;
+                std::vector<StoredSurfaceNormal>& cell_normals = cell_query.Value();
                 cell_normals.clear();
                 return true;
             }
@@ -938,9 +938,9 @@ namespace simple_particle_contact_simulator
                     // Transform the link point into the environment frame
                     const Eigen::Vector4d& link_relative_point = link_points[point_idx];
                     const Eigen::Vector4d environment_relative_point = link_transform * link_relative_point;
-                    const std::pair<float, bool> sdf_check = this->environment_sdf_.GetImmutable4d(environment_relative_point);
+                    const auto sdf_check = this->environment_sdf_.GetImmutable4d(environment_relative_point);
                     //const std::pair<double, bool> sdf_check = this->environment_sdf_.EstimateDistance(environment_relative_point);
-                    if (sdf_check.second == false)
+                    if (!sdf_check)
                     {
                         if (debug_level_ >= 1)
                         {
@@ -952,13 +952,13 @@ namespace simple_particle_contact_simulator
 #endif
                     }
                     // We only work with points in collision
-                    if (sdf_check.first < real_collision_threshold)
+                    if (sdf_check.Value() < real_collision_threshold)
                     {
-                        if (sdf_check.first < (real_collision_threshold - this->environment_sdf_.GetResolution()))
+                        if (sdf_check.Value() < (real_collision_threshold - this->environment_sdf_.GetResolution()))
                         {
                             if (debug_level_ >= 25)
                             {
-                                std::cout << "Point at " << PrettyPrint::PrettyPrint(environment_relative_point) << " in collision with SDF distance " << sdf_check.first << " and threshold " << real_collision_threshold;
+                                std::cout << "Point at " << PrettyPrint::PrettyPrint(environment_relative_point) << " in collision with SDF distance " << sdf_check.Value() << " and threshold " << real_collision_threshold;
                             }
                             return true;
                         }
@@ -969,7 +969,7 @@ namespace simple_particle_contact_simulator
                             {
                                 if (debug_level_ >= 25)
                                 {
-                                    std::cout << "Point at " << PrettyPrint::PrettyPrint(environment_relative_point) << " in collision with SDF distance " << sdf_check.first << " and threshold " << real_collision_threshold;
+                                    std::cout << "Point at " << PrettyPrint::PrettyPrint(environment_relative_point) << " in collision with SDF distance " << sdf_check.Value() << " and threshold " << real_collision_threshold;
                                 }
                                 return true;
                             }
